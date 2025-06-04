@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,20 +20,22 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.esport.torneo.application.dto.CategoryDto;
 import com.esport.torneo.application.service.CategoryApplicationService;
-import com.esport.torneo.application.service.CategoryApplicationService.CategoryStatsDto;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 /**
- * Controlador REST para la gestión de categorías.
+ * Controlador REST para gestión de categorías de torneos.
  * 
- * Proporciona endpoints para operaciones CRUD y consultas
- * relacionadas con categorías de torneos.
+ * Proporciona endpoints para:
+ * - CRUD completo de categorías
+ * - Búsquedas y filtros
+ * - Gestión de estado activo/inactivo
  * 
  * @author Andrés Orduz Grimaldo
  * @version 1.0.0
@@ -40,7 +43,7 @@ import jakarta.validation.Valid;
  */
 @RestController
 @RequestMapping("/api/v1/categories")
-@Tag(name = "Categories", description = "API para gestión de categorías de torneos")
+@Tag(name = "Categories", description = "Gestión de categorías de torneos")
 @CrossOrigin(origins = "*", maxAge = 3600)
 public class CategoryController {
 
@@ -58,29 +61,26 @@ public class CategoryController {
     }
 
     /**
-     * Crea una nueva categoría.
+     * Obtiene todas las categorías activas.
      * 
-     * @param categoryDto datos de la categoría a crear
-     * @return la categoría creada
+     * @return lista de categorías activas
      */
-    @PostMapping
-    @Operation(summary = "Crear nueva categoría", description = "Crea una nueva categoría en el sistema")
+    @GetMapping
+    @Operation(summary = "Listar categorías", description = "Obtiene todas las categorías activas")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "201", description = "Categoría creada exitosamente"),
-        @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos"),
-        @ApiResponse(responseCode = "409", description = "Ya existe una categoría con el mismo código")
+        @ApiResponse(responseCode = "200", description = "Lista de categorías obtenida exitosamente"),
+        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
     })
-    public ResponseEntity<CategoryDto> createCategory(
-            @Valid @RequestBody CategoryDto categoryDto) {
-        
-        logger.info("Creando nueva categoría: {}", categoryDto.getCode());
+    public ResponseEntity<List<CategoryDto>> getAllCategories() {
+        logger.info("Obteniendo todas las categorías activas");
         
         try {
-            CategoryDto createdCategory = categoryApplicationService.createCategory(categoryDto);
-            return ResponseEntity.status(HttpStatus.CREATED).body(createdCategory);
-        } catch (IllegalArgumentException e) {
-            logger.warn("Error creando categoría: {}", e.getMessage());
-            return ResponseEntity.badRequest().build();
+            List<CategoryDto> categories = categoryApplicationService.getAllActiveCategories();
+            logger.info("Se encontraron {} categorías activas", categories.size());
+            return ResponseEntity.ok(categories);
+        } catch (Exception e) {
+            logger.error("Error obteniendo categorías: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
@@ -91,121 +91,67 @@ public class CategoryController {
      * @return la categoría encontrada
      */
     @GetMapping("/{id}")
-    @Operation(summary = "Obtener categoría por ID", description = "Obtiene una categoría específica por su ID")
+    @Operation(summary = "Obtener categoría", description = "Obtiene una categoría específica por ID")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Categoría encontrada"),
-        @ApiResponse(responseCode = "404", description = "Categoría no encontrada")
+        @ApiResponse(responseCode = "404", description = "Categoría no encontrada"),
+        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
     })
     public ResponseEntity<CategoryDto> getCategoryById(
             @Parameter(description = "ID de la categoría") @PathVariable Long id) {
         
-        logger.debug("Obteniendo categoría por ID: {}", id);
+        logger.info("Obteniendo categoría con ID: {}", id);
         
         try {
             CategoryDto category = categoryApplicationService.getCategoryById(id);
             return ResponseEntity.ok(category);
         } catch (IllegalArgumentException e) {
-            logger.warn("Categoría no encontrada: {}", id);
+            logger.warn("Categoría no encontrada con ID: {}", id);
             return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("Error obteniendo categoría {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
     /**
-     * Obtiene una categoría por código.
+     * Crea una nueva categoría.
      * 
-     * @param code código de la categoría
-     * @return la categoría encontrada
+     * @param categoryDto datos de la categoría a crear
+     * @return la categoría creada
      */
-    @GetMapping("/code/{code}")
-    @Operation(summary = "Obtener categoría por código", description = "Obtiene una categoría específica por su código único")
+    @PostMapping
+    @Operation(summary = "Crear categoría", description = "Crea una nueva categoría de torneo")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Categoría encontrada"),
-        @ApiResponse(responseCode = "404", description = "Categoría no encontrada")
+        @ApiResponse(responseCode = "201", description = "Categoría creada exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos"),
+        @ApiResponse(responseCode = "409", description = "Categoría ya existe"),
+        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
     })
-    public ResponseEntity<CategoryDto> getCategoryByCode(
-            @Parameter(description = "Código de la categoría") @PathVariable String code) {
+    @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<CategoryDto> createCategory(
+            @Parameter(description = "Datos de la categoría") @Valid @RequestBody CategoryDto categoryDto) {
         
-        logger.debug("Obteniendo categoría por código: {}", code);
+        logger.info("Creando nueva categoría: {}", categoryDto.getCode());
         
         try {
-            CategoryDto category = categoryApplicationService.getCategoryByCode(code);
-            return ResponseEntity.ok(category);
+            CategoryDto createdCategory = categoryApplicationService.createCategory(categoryDto);
+            logger.info("Categoría creada exitosamente con ID: {}", createdCategory.getId());
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdCategory);
         } catch (IllegalArgumentException e) {
-            logger.warn("Categoría no encontrada: {}", code);
-            return ResponseEntity.notFound().build();
+            logger.warn("Error creando categoría: {}", e.getMessage());
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            logger.error("Error interno creando categoría: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-    }
-
-    /**
-     * Obtiene todas las categorías activas.
-     * 
-     * @return lista de categorías activas
-     */
-    @GetMapping
-    @Operation(summary = "Listar categorías activas", description = "Obtiene todas las categorías activas del sistema")
-    @ApiResponse(responseCode = "200", description = "Lista de categorías obtenida exitosamente")
-    public ResponseEntity<List<CategoryDto>> getAllActiveCategories() {
-        logger.debug("Obteniendo todas las categorías activas");
-        
-        List<CategoryDto> categories = categoryApplicationService.getAllActiveCategories();
-        return ResponseEntity.ok(categories);
-    }
-
-    /**
-     * Busca categorías por descripción.
-     * 
-     * @param description descripción a buscar
-     * @return lista de categorías que coinciden
-     */
-    @GetMapping("/search/description")
-    @Operation(summary = "Buscar categorías por descripción", description = "Busca categorías que contengan el texto especificado en la descripción")
-    @ApiResponse(responseCode = "200", description = "Búsqueda completada exitosamente")
-    public ResponseEntity<List<CategoryDto>> searchCategoriesByDescription(
-            @Parameter(description = "Texto a buscar en la descripción") @RequestParam String description) {
-        
-        logger.debug("Buscando categorías por descripción: {}", description);
-        
-        List<CategoryDto> categories = categoryApplicationService.searchCategoriesByDescription(description);
-        return ResponseEntity.ok(categories);
-    }
-
-    /**
-     * Busca categorías por alias.
-     * 
-     * @param alias alias a buscar
-     * @return lista de categorías que coinciden
-     */
-    @GetMapping("/search/alias")
-    @Operation(summary = "Buscar categorías por alias", description = "Busca categorías que contengan el texto especificado en el alias")
-    @ApiResponse(responseCode = "200", description = "Búsqueda completada exitosamente")
-    public ResponseEntity<List<CategoryDto>> searchCategoriesByAlias(
-            @Parameter(description = "Texto a buscar en el alias") @RequestParam String alias) {
-        
-        logger.debug("Buscando categorías por alias: {}", alias);
-        
-        List<CategoryDto> categories = categoryApplicationService.searchCategoriesByAlias(alias);
-        return ResponseEntity.ok(categories);
-    }
-
-    /**
-     * Obtiene categorías que tienen alias definido.
-     * 
-     * @return lista de categorías con alias
-     */
-    @GetMapping("/with-alias")
-    @Operation(summary = "Obtener categorías con alias", description = "Obtiene todas las categorías que tienen alias definido")
-    @ApiResponse(responseCode = "200", description = "Lista de categorías con alias obtenida exitosamente")
-    public ResponseEntity<List<CategoryDto>> getCategoriesWithAlias() {
-        logger.debug("Obteniendo categorías con alias");
-        
-        List<CategoryDto> categories = categoryApplicationService.getCategoriesWithAlias();
-        return ResponseEntity.ok(categories);
     }
 
     /**
      * Actualiza una categoría existente.
      * 
-     * @param id ID de la categoría a actualizar
+     * @param id ID de la categoría
      * @param categoryDto datos actualizados
      * @return la categoría actualizada
      */
@@ -215,113 +161,122 @@ public class CategoryController {
         @ApiResponse(responseCode = "200", description = "Categoría actualizada exitosamente"),
         @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos"),
         @ApiResponse(responseCode = "404", description = "Categoría no encontrada"),
-        @ApiResponse(responseCode = "409", description = "Conflicto con código existente")
+        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
     })
+    @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<CategoryDto> updateCategory(
             @Parameter(description = "ID de la categoría") @PathVariable Long id,
-            @Valid @RequestBody CategoryDto categoryDto) {
+            @Parameter(description = "Datos actualizados") @Valid @RequestBody CategoryDto categoryDto) {
         
-        logger.info("Actualizando categoría: {}", id);
+        logger.info("Actualizando categoría con ID: {}", id);
         
         try {
             CategoryDto updatedCategory = categoryApplicationService.updateCategory(id, categoryDto);
+            logger.info("Categoría {} actualizada exitosamente", id);
             return ResponseEntity.ok(updatedCategory);
         } catch (IllegalArgumentException e) {
-            logger.warn("Error actualizando categoría: {}", e.getMessage());
+            logger.warn("Error actualizando categoría {}: {}", id, e.getMessage());
             return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("Error interno actualizando categoría {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
     /**
      * Elimina una categoría (soft delete).
      * 
-     * @param id ID de la categoría a eliminar
-     * @return respuesta sin contenido
+     * @param id ID de la categoría
+     * @return confirmación de eliminación
      */
     @DeleteMapping("/{id}")
-    @Operation(summary = "Eliminar categoría", description = "Elimina una categoría del sistema (soft delete)")
+    @Operation(summary = "Eliminar categoría", description = "Elimina una categoría (soft delete)")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "204", description = "Categoría eliminada exitosamente"),
         @ApiResponse(responseCode = "404", description = "Categoría no encontrada"),
-        @ApiResponse(responseCode = "409", description = "No se puede eliminar la categoría")
+        @ApiResponse(responseCode = "409", description = "Categoría en uso, no se puede eliminar"),
+        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
     })
+    @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteCategory(
             @Parameter(description = "ID de la categoría") @PathVariable Long id) {
         
-        logger.info("Eliminando categoría: {}", id);
+        logger.info("Eliminando categoría con ID: {}", id);
         
         try {
             categoryApplicationService.deleteCategory(id);
+            logger.info("Categoría {} eliminada exitosamente", id);
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
-            logger.warn("Categoría no encontrada: {}", id);
+            logger.warn("Categoría no encontrada para eliminar: {}", id);
             return ResponseEntity.notFound().build();
         } catch (IllegalStateException e) {
-            logger.warn("No se puede eliminar la categoría: {}", e.getMessage());
+            logger.warn("Categoría {} en uso, no se puede eliminar: {}", id, e.getMessage());
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        } catch (Exception e) {
+            logger.error("Error interno eliminando categoría {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
     /**
-     * Reactiva una categoría eliminada.
+     * Busca categorías por descripción.
      * 
-     * @param id ID de la categoría a reactivar
-     * @return la categoría reactivada
+     * @param description texto a buscar en la descripción
+     * @return lista de categorías que coinciden
      */
-    @PostMapping("/{id}/reactivate")
-    @Operation(summary = "Reactivar categoría", description = "Reactiva una categoría previamente eliminada")
+    @GetMapping("/search")
+    @Operation(summary = "Buscar categorías", description = "Busca categorías por descripción")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Categoría reactivada exitosamente"),
-        @ApiResponse(responseCode = "404", description = "Categoría no encontrada"),
-        @ApiResponse(responseCode = "409", description = "La categoría ya está activa")
+        @ApiResponse(responseCode = "200", description = "Búsqueda realizada exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Parámetros de búsqueda inválidos"),
+        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
     })
-    public ResponseEntity<CategoryDto> reactivateCategory(
-            @Parameter(description = "ID de la categoría") @PathVariable Long id) {
+    public ResponseEntity<List<CategoryDto>> searchCategories(
+            @Parameter(description = "Texto a buscar en la descripción") 
+            @RequestParam String description) {
         
-        logger.info("Reactivando categoría: {}", id);
+        logger.info("Buscando categorías con descripción: {}", description);
+        
+        if (description == null || description.trim().isEmpty()) {
+            logger.warn("Parámetro de búsqueda vacío");
+            return ResponseEntity.badRequest().build();
+        }
         
         try {
-            CategoryDto reactivatedCategory = categoryApplicationService.reactivateCategory(id);
-            return ResponseEntity.ok(reactivatedCategory);
-        } catch (IllegalArgumentException e) {
-            logger.warn("Categoría no encontrada: {}", id);
-            return ResponseEntity.notFound().build();
-        } catch (IllegalStateException e) {
-            logger.warn("La categoría ya está activa: {}", id);
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+            List<CategoryDto> categories = categoryApplicationService.searchCategoriesByDescription(description);
+            logger.info("Se encontraron {} categorías con descripción '{}'", categories.size(), description);
+            return ResponseEntity.ok(categories);
+        } catch (Exception e) {
+            logger.error("Error buscando categorías: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
     /**
      * Obtiene estadísticas de categorías.
      * 
-     * @return estadísticas generales
+     * @return estadísticas de uso de categorías
      */
     @GetMapping("/stats")
-    @Operation(summary = "Obtener estadísticas de categorías", description = "Obtiene estadísticas generales sobre las categorías del sistema")
-    @ApiResponse(responseCode = "200", description = "Estadísticas obtenidas exitosamente")
-    public ResponseEntity<CategoryStatsDto> getCategoryStats() {
-        logger.debug("Obteniendo estadísticas de categorías");
+    @Operation(summary = "Estadísticas de categorías", description = "Obtiene estadísticas de uso de categorías")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Estadísticas obtenidas exitosamente"),
+        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
+    })
+    @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('ORGANIZER')")
+    public ResponseEntity<Object> getCategoryStats() {
+        logger.info("Obteniendo estadísticas de categorías");
         
-        CategoryStatsDto stats = categoryApplicationService.getCategoryStats();
-        return ResponseEntity.ok(stats);
-    }
-
-    /**
-     * Verifica si existe una categoría con el código dado.
-     * 
-     * @param code código a verificar
-     * @return respuesta con el resultado de la verificación
-     */
-    @GetMapping("/exists/{code}")
-    @Operation(summary = "Verificar existencia de categoría", description = "Verifica si existe una categoría con el código especificado")
-    @ApiResponse(responseCode = "200", description = "Verificación completada")
-    public ResponseEntity<Boolean> existsByCode(
-            @Parameter(description = "Código de la categoría") @PathVariable String code) {
-        
-        logger.debug("Verificando existencia de categoría: {}", code);
-        
-        boolean exists = categoryApplicationService.existsByCode(code);
-        return ResponseEntity.ok(exists);
+        try {
+            Object stats = categoryApplicationService.getCategoryStats();
+            return ResponseEntity.ok(stats);
+        } catch (Exception e) {
+            logger.error("Error obteniendo estadísticas de categorías: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 } 

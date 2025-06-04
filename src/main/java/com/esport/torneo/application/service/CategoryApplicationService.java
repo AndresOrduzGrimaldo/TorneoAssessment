@@ -16,10 +16,10 @@ import com.esport.torneo.domain.category.Category;
 import com.esport.torneo.infrastructure.repository.CategoryRepository;
 
 /**
- * Servicio de aplicación para la gestión de categorías.
+ * Servicio de aplicación para gestionar categorías.
  * 
- * Proporciona operaciones CRUD y lógica de negocio
- * para la gestión de categorías de torneos.
+ * Coordina las operaciones de negocio relacionadas con categorías,
+ * actuando como capa de aplicación en la arquitectura DDD.
  * 
  * @author Andrés Orduz Grimaldo
  * @version 1.0.0
