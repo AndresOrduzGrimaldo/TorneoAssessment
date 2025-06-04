@@ -1,15 +1,34 @@
 package com.esport.torneo.domain.tournament;
 
-import com.esport.torneo.domain.common.BaseEntity;
-import com.esport.torneo.domain.category.Category;
-import com.esport.torneo.domain.game.Game;
-import jakarta.persistence.*;
-import jakarta.validation.constraints.*;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+
+import com.esport.torneo.domain.category.Category;
+import com.esport.torneo.domain.common.BaseEntity;
+import com.esport.torneo.domain.game.Game;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
+import jakarta.persistence.Table;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Future;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 
 /**
  * Entidad raíz del agregado Tournament.
@@ -375,12 +394,34 @@ public class Tournament extends BaseEntity {
             throw new IllegalStateException("El torneo ha alcanzado el máximo de participantes");
         }
         
-        if (isRegistrationOpen()) {
+        if (!isRegistrationOpen()) {
             throw new IllegalStateException("El período de registración no está abierto");
         }
         
         participants.add(participant);
         currentParticipants++;
+    }
+
+    /**
+     * Método de conveniencia para agregar un participante con userId y teamName.
+     * 
+     * @param userId ID del usuario
+     * @param teamName nombre del equipo (opcional)
+     */
+    public void addParticipant(Long userId, String teamName) {
+        TournamentParticipant participant = new TournamentParticipant(this, userId, teamName, null);
+        addParticipant(participant);
+    }
+
+    /**
+     * Verifica si el torneo permite registrar nuevos participantes.
+     * 
+     * @return true si se pueden registrar participantes
+     */
+    public boolean canRegisterParticipants() {
+        return status.allowsRegistration() && 
+               isRegistrationOpen() && 
+               hasAvailableSlots();
     }
 
     /**

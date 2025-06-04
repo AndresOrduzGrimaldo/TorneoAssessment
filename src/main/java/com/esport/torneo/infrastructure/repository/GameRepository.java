@@ -1,13 +1,14 @@
 package com.esport.torneo.infrastructure.repository;
 
-import com.esport.torneo.domain.game.Game;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
-import java.util.Optional;
+import com.esport.torneo.domain.game.Game;
 
 /**
  * Repositorio para la entidad Game.
@@ -37,6 +38,14 @@ public interface GameRepository extends JpaRepository<Game, Long> {
      * @return el juego si existe y está activo
      */
     Optional<Game> findByCodeAndActiveTrue(String code);
+
+    /**
+     * Busca un juego por ID si está activo.
+     * 
+     * @param id ID del juego
+     * @return el juego si existe y está activo
+     */
+    Optional<Game> findByIdAndActiveTrue(Long id);
 
     /**
      * Busca juegos activos ordenados por nombre.

@@ -378,4 +378,189 @@ public class TournamentApplicationService {
     public List<Object[]> findParticipationStats() {
         return tournamentRepository.findParticipationStats();
     }
+
+    /**
+     * Obtiene un torneo por ID - método público requerido por el controlador.
+     * 
+     * @param id ID del torneo
+     * @return el torneo encontrado
+     * @throws IllegalArgumentException si el torneo no existe
+     */
+    @Transactional(readOnly = true)
+    public TournamentDto getTournamentById(Long id) {
+        return findTournamentById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Torneo no encontrado con ID: " + id));
+    }
+
+    /**
+     * Obtiene información pública de un torneo (sin datos sensibles).
+     * 
+     * @param id ID del torneo
+     * @return información pública del torneo
+     * @throws IllegalArgumentException si el torneo no existe
+     */
+    @Transactional(readOnly = true)
+    public TournamentDto getPublicTournamentInfo(Long id) {
+        Tournament tournament = tournamentRepository.findByIdAndActiveTrue(id)
+                .orElseThrow(() -> new IllegalArgumentException("Torneo no encontrado con ID: " + id));
+        
+        // Solo mostrar información pública para torneos publicados o en progreso
+        if (tournament.getStatus() == TournamentStatus.DRAFT) {
+            throw new IllegalArgumentException("El torneo no está disponible públicamente");
+        }
+        
+        return tournamentMapper.toDto(tournament);
+    }
+
+    /**
+     * Obtiene todos los torneos con paginación - método público para el controlador.
+     * 
+     * @param pageable configuración de paginación
+     * @return página de torneos
+     */
+    @Transactional(readOnly = true)
+    public Page<TournamentDto> getAllTournaments(Pageable pageable) {
+        return findAllTournaments(pageable);
+    }
+
+    /**
+     * Busca torneos por nombre con paginación.
+     * 
+     * @param name nombre a buscar
+     * @param pageable configuración de paginación
+     * @return página de torneos
+     */
+    @Transactional(readOnly = true)
+    public Page<TournamentDto> searchTournamentsByName(String name, Pageable pageable) {
+        return tournamentRepository.findByNameContainingIgnoreCaseAndActiveTrue(name, pageable)
+                .map(tournamentMapper::toDto);
+    }
+
+    /**
+     * Obtiene torneos por categoría con paginación.
+     * 
+     * @param categoryId ID de la categoría
+     * @param pageable configuración de paginación
+     * @return página de torneos
+     */
+    @Transactional(readOnly = true)
+    public Page<TournamentDto> getTournamentsByCategory(Long categoryId, Pageable pageable) {
+        return tournamentRepository.findByCategoryIdAndActiveTrue(categoryId, pageable)
+                .map(tournamentMapper::toDto);
+    }
+
+    /**
+     * Obtiene torneos por juego con paginación.
+     * 
+     * @param gameId ID del juego
+     * @param pageable configuración de paginación
+     * @return página de torneos
+     */
+    @Transactional(readOnly = true)
+    public Page<TournamentDto> getTournamentsByGame(Long gameId, Pageable pageable) {
+        return tournamentRepository.findByGameIdAndActiveTrue(gameId, pageable)
+                .map(tournamentMapper::toDto);
+    }
+
+    /**
+     * Obtiene torneos por estado con paginación - método público para el controlador.
+     * 
+     * @param status estado del torneo
+     * @param pageable configuración de paginación
+     * @return página de torneos
+     */
+    @Transactional(readOnly = true)
+    public Page<TournamentDto> getTournamentsByStatus(TournamentStatus status, Pageable pageable) {
+        return findTournamentsByStatus(status, pageable);
+    }
+
+    /**
+     * Obtiene torneos próximos a iniciar.
+     * 
+     * @param endTime tiempo límite para buscar
+     * @param pageable configuración de paginación
+     * @return página de torneos próximos
+     */
+    @Transactional(readOnly = true)
+    public Page<TournamentDto> getUpcomingTournaments(LocalDateTime endTime, Pageable pageable) {
+        LocalDateTime now = LocalDateTime.now();
+        return tournamentRepository.findByStartDateBetweenAndStatusAndActiveTrue(
+                now, endTime, TournamentStatus.PUBLISHED, pageable)
+                .map(tournamentMapper::toDto);
+    }
+
+    /**
+     * Registra un participante en un torneo.
+     * 
+     * @param tournamentId ID del torneo
+     * @param userId ID del usuario
+     * @param teamName nombre del equipo (opcional)
+     * @throws IllegalArgumentException si no se puede registrar
+     */
+    public void registerParticipant(Long tournamentId, Long userId, String teamName) {
+        Tournament tournament = tournamentRepository.findByIdAndActiveTrue(tournamentId)
+                .orElseThrow(() -> new IllegalArgumentException("Torneo no encontrado"));
+
+        // Verificar que el torneo permite registros
+        if (!tournament.canRegisterParticipants()) {
+            throw new IllegalArgumentException("El torneo no permite nuevos registros");
+        }
+
+        // Crear y agregar participante
+        tournament.addParticipant(userId, teamName);
+        tournamentRepository.save(tournament);
+    }
+
+    /**
+     * Obtiene estadísticas generales de torneos.
+     * 
+     * @return estadísticas de torneos
+     */
+    @Transactional(readOnly = true)
+    public TournamentStatsDto getTournamentStats() {
+        long totalTournaments = tournamentRepository.countByActiveTrue();
+        long draftTournaments = tournamentRepository.countByStatusAndActiveTrue(TournamentStatus.DRAFT);
+        long publishedTournaments = tournamentRepository.countByStatusAndActiveTrue(TournamentStatus.PUBLISHED);
+        long inProgressTournaments = tournamentRepository.countByStatusAndActiveTrue(TournamentStatus.IN_PROGRESS);
+        long finishedTournaments = tournamentRepository.countByStatusAndActiveTrue(TournamentStatus.FINISHED);
+        long cancelledTournaments = tournamentRepository.countByStatusAndActiveTrue(TournamentStatus.CANCELLED);
+
+        return new TournamentStatsDto(
+                totalTournaments,
+                draftTournaments,
+                publishedTournaments,
+                inProgressTournaments,
+                finishedTournaments,
+                cancelledTournaments
+        );
+    }
+
+    /**
+     * DTO para estadísticas de torneos.
+     */
+    public static class TournamentStatsDto {
+        private final long totalTournaments;
+        private final long draftTournaments;
+        private final long publishedTournaments;
+        private final long inProgressTournaments;
+        private final long finishedTournaments;
+        private final long cancelledTournaments;
+
+        public TournamentStatsDto(long totalTournaments, long draftTournaments, long publishedTournaments,
+                                 long inProgressTournaments, long finishedTournaments, long cancelledTournaments) {
+            this.totalTournaments = totalTournaments;
+            this.draftTournaments = draftTournaments;
+            this.publishedTournaments = publishedTournaments;
+            this.inProgressTournaments = inProgressTournaments;
+            this.finishedTournaments = finishedTournaments;
+            this.cancelledTournaments = cancelledTournaments;
+        }
+
+        public long getTotalTournaments() { return totalTournaments; }
+        public long getDraftTournaments() { return draftTournaments; }
+        public long getPublishedTournaments() { return publishedTournaments; }
+        public long getInProgressTournaments() { return inProgressTournaments; }
+        public long getFinishedTournaments() { return finishedTournaments; }
+        public long getCancelledTournaments() { return cancelledTournaments; }
+    }
 } 

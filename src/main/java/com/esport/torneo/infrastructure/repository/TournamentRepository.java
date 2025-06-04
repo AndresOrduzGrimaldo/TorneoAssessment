@@ -1,8 +1,10 @@
 package com.esport.torneo.infrastructure.repository;
 
-import com.esport.torneo.domain.tournament.Tournament;
-import com.esport.torneo.domain.tournament.TournamentStatus;
-import com.esport.torneo.domain.tournament.TournamentType;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,10 +12,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
+import com.esport.torneo.domain.tournament.Tournament;
+import com.esport.torneo.domain.tournament.TournamentStatus;
+import com.esport.torneo.domain.tournament.TournamentType;
 
 /**
  * Repositorio para la entidad Tournament.
@@ -228,4 +229,61 @@ public interface TournamentRepository extends JpaRepository<Tournament, Long> {
     @Query(value = "SELECT * FROM tournaments WHERE active = true AND status = 'PUBLISHED' " +
                    "ORDER BY current_participants DESC LIMIT :limit", nativeQuery = true)
     List<Tournament> findPopularTournaments(@Param("limit") int limit);
+
+    /**
+     * Cuenta todos los torneos activos.
+     * 
+     * @return número total de torneos activos
+     */
+    long countByActiveTrue();
+
+    /**
+     * Busca un torneo por ID si está activo.
+     * 
+     * @param id ID del torneo
+     * @return el torneo si existe y está activo
+     */
+    Optional<Tournament> findByIdAndActiveTrue(Long id);
+
+    /**
+     * Busca torneos por nombre con paginación (búsqueda parcial, case insensitive).
+     * 
+     * @param name texto a buscar en el nombre
+     * @param pageable configuración de paginación
+     * @return página de torneos que coinciden
+     */
+    Page<Tournament> findByNameContainingIgnoreCaseAndActiveTrue(String name, Pageable pageable);
+
+    /**
+     * Busca torneos por categoría con paginación.
+     * 
+     * @param categoryId el ID de la categoría
+     * @param pageable configuración de paginación
+     * @return página de torneos de la categoría
+     */
+    Page<Tournament> findByCategoryIdAndActiveTrue(Long categoryId, Pageable pageable);
+
+    /**
+     * Busca torneos por juego con paginación.
+     * 
+     * @param gameId el ID del juego
+     * @param pageable configuración de paginación
+     * @return página de torneos del juego
+     */
+    Page<Tournament> findByGameIdAndActiveTrue(Long gameId, Pageable pageable);
+
+    /**
+     * Busca torneos por rango de fechas de inicio, estado y con paginación.
+     * 
+     * @param startDate fecha de inicio del rango
+     * @param endDate fecha de fin del rango
+     * @param status estado del torneo
+     * @param pageable configuración de paginación
+     * @return página de torneos en el rango
+     */
+    Page<Tournament> findByStartDateBetweenAndStatusAndActiveTrue(
+            LocalDateTime startDate, 
+            LocalDateTime endDate, 
+            TournamentStatus status, 
+            Pageable pageable);
 } 
