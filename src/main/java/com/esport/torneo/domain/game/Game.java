@@ -2,20 +2,16 @@ package com.esport.torneo.domain.game;
 
 import com.esport.torneo.domain.common.BaseEntity;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 
 /**
- * Entidad que representa un tipo de juego disponible para torneos.
+ * Entidad que representa un videojuego disponible para torneos.
  * 
- * Define las características específicas de cada juego como:
- * - Nombre completo y código identificador
- * - Cantidad de jugadores por partida
- * - Configuraciones específicas del juego
- * 
- * Ejemplos: "Counter-Strike 2", "League of Legends", "Valorant", etc.
+ * Contiene información sobre:
+ * - Identificación del juego (código y nombre)
+ * - Configuración de jugadores
+ * - Metadatos (género, plataforma, descripción)
+ * - URL de imagen
  * 
  * @author Andrés Orduz Grimaldo
  * @version 1.0.0
@@ -25,13 +21,14 @@ import jakarta.validation.constraints.Size;
 @Table(name = "games", indexes = {
     @Index(name = "idx_game_code", columnList = "code", unique = true),
     @Index(name = "idx_game_active", columnList = "active"),
-    @Index(name = "idx_game_player_count", columnList = "player_count")
+    @Index(name = "idx_game_player_count", columnList = "player_count"),
+    @Index(name = "idx_game_genre", columnList = "genre"),
+    @Index(name = "idx_game_deleted", columnList = "deleted_at")
 })
 public class Game extends BaseEntity {
 
     /**
      * Código único del juego.
-     * Usado para identificación programática.
      */
     @NotBlank(message = "El código del juego es obligatorio")
     @Size(min = 2, max = 30, message = "El código debe tener entre 2 y 30 caracteres")
@@ -41,16 +38,16 @@ public class Game extends BaseEntity {
     /**
      * Nombre completo del juego.
      */
-    @NotBlank(message = "El nombre completo del juego es obligatorio")
-    @Size(min = 2, max = 100, message = "El nombre debe tener entre 2 y 100 caracteres")
+    @NotBlank(message = "El nombre completo es obligatorio")
+    @Size(min = 3, max = 100, message = "El nombre debe tener entre 3 y 100 caracteres")
     @Column(name = "full_name", nullable = false, length = 100)
     private String fullName;
 
     /**
-     * Cantidad de jugadores por partida/equipo.
+     * Número de jugadores por equipo/partida.
      */
-    @NotNull(message = "La cantidad de jugadores es obligatoria")
-    @Positive(message = "La cantidad de jugadores debe ser positiva")
+    @NotNull(message = "El número de jugadores es obligatorio")
+    @Positive(message = "El número de jugadores debe ser positivo")
     @Column(name = "player_count", nullable = false)
     private Integer playerCount;
 
@@ -62,28 +59,28 @@ public class Game extends BaseEntity {
     private String description;
 
     /**
-     * URL de la imagen/logo del juego.
+     * URL de la imagen del juego.
      */
-    @Size(max = 255, message = "La URL de la imagen no puede exceder 255 caracteres")
+    @Size(max = 255, message = "La URL de imagen no puede exceder 255 caracteres")
     @Column(name = "image_url", length = 255)
     private String imageUrl;
 
     /**
-     * Género del juego (FPS, MOBA, Battle Royale, etc.).
+     * Género del juego.
      */
     @Size(max = 50, message = "El género no puede exceder 50 caracteres")
     @Column(name = "genre", length = 50)
     private String genre;
 
     /**
-     * Plataforma principal del juego (PC, Console, Mobile).
+     * Plataforma del juego.
      */
     @Size(max = 30, message = "La plataforma no puede exceder 30 caracteres")
     @Column(name = "platform", length = 30)
     private String platform;
 
     /**
-     * Constructor por defecto requerido por JPA.
+     * Constructor por defecto para JPA.
      */
     protected Game() {
         super();
@@ -94,7 +91,7 @@ public class Game extends BaseEntity {
      * 
      * @param code código único del juego
      * @param fullName nombre completo del juego
-     * @param playerCount cantidad de jugadores por partida
+     * @param playerCount número de jugadores
      */
     public Game(String code, String fullName, Integer playerCount) {
         super();
@@ -104,187 +101,138 @@ public class Game extends BaseEntity {
     }
 
     /**
-     * Constructor completo para crear un nuevo juego.
+     * Constructor completo.
      * 
      * @param code código único del juego
      * @param fullName nombre completo del juego
-     * @param playerCount cantidad de jugadores por partida
+     * @param playerCount número de jugadores
      * @param description descripción del juego
-     * @param imageUrl URL de la imagen del juego
      * @param genre género del juego
      * @param platform plataforma del juego
      */
     public Game(String code, String fullName, Integer playerCount, 
-                String description, String imageUrl, String genre, String platform) {
+                String description, String genre, String platform) {
         this(code, fullName, playerCount);
         this.description = description;
-        this.imageUrl = imageUrl;
         this.genre = genre;
         this.platform = platform;
     }
 
     /**
-     * Obtiene el código del juego.
-     * 
-     * @return el código único del juego
-     */
-    public String getCode() {
-        return code;
-    }
-
-    /**
-     * Establece el código del juego.
-     * 
-     * @param code el código único a establecer
-     */
-    public void setCode(String code) {
-        this.code = code;
-    }
-
-    /**
-     * Obtiene el nombre completo del juego.
-     * 
-     * @return el nombre completo del juego
-     */
-    public String getFullName() {
-        return fullName;
-    }
-
-    /**
-     * Establece el nombre completo del juego.
-     * 
-     * @param fullName el nombre completo a establecer
-     */
-    public void setFullName(String fullName) {
-        this.fullName = fullName;
-    }
-
-    /**
-     * Obtiene la cantidad de jugadores por partida.
-     * 
-     * @return la cantidad de jugadores
-     */
-    public Integer getPlayerCount() {
-        return playerCount;
-    }
-
-    /**
-     * Establece la cantidad de jugadores por partida.
-     * 
-     * @param playerCount la cantidad de jugadores a establecer
-     */
-    public void setPlayerCount(Integer playerCount) {
-        this.playerCount = playerCount;
-    }
-
-    /**
-     * Obtiene la descripción del juego.
-     * 
-     * @return la descripción del juego
-     */
-    public String getDescription() {
-        return description;
-    }
-
-    /**
-     * Establece la descripción del juego.
-     * 
-     * @param description la descripción a establecer
-     */
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    /**
-     * Obtiene la URL de la imagen del juego.
-     * 
-     * @return la URL de la imagen
-     */
-    public String getImageUrl() {
-        return imageUrl;
-    }
-
-    /**
-     * Establece la URL de la imagen del juego.
-     * 
-     * @param imageUrl la URL de la imagen a establecer
-     */
-    public void setImageUrl(String imageUrl) {
-        this.imageUrl = imageUrl;
-    }
-
-    /**
-     * Obtiene el género del juego.
-     * 
-     * @return el género del juego
-     */
-    public String getGenre() {
-        return genre;
-    }
-
-    /**
-     * Establece el género del juego.
-     * 
-     * @param genre el género a establecer
-     */
-    public void setGenre(String genre) {
-        this.genre = genre;
-    }
-
-    /**
-     * Obtiene la plataforma del juego.
-     * 
-     * @return la plataforma del juego
-     */
-    public String getPlatform() {
-        return platform;
-    }
-
-    /**
-     * Establece la plataforma del juego.
-     * 
-     * @param platform la plataforma a establecer
-     */
-    public void setPlatform(String platform) {
-        this.platform = platform;
-    }
-
-    /**
-     * Actualiza la información del juego.
+     * Actualiza la información básica del juego.
      * 
      * @param fullName nuevo nombre completo
-     * @param playerCount nueva cantidad de jugadores
+     * @param playerCount nuevo número de jugadores
      * @param description nueva descripción
-     * @param imageUrl nueva URL de imagen
-     * @param genre nuevo género
-     * @param platform nueva plataforma
      */
-    public void updateGame(String fullName, Integer playerCount, String description,
-                          String imageUrl, String genre, String platform) {
+    public void updateBasicInfo(String fullName, Integer playerCount, String description) {
         this.fullName = fullName;
         this.playerCount = playerCount;
         this.description = description;
-        this.imageUrl = imageUrl;
-        this.genre = genre;
-        this.platform = platform;
     }
 
     /**
-     * Verifica si el juego es multijugador.
+     * Actualiza los metadatos del juego.
      * 
-     * @return true si el juego requiere más de un jugador
+     * @param genre nuevo género
+     * @param platform nueva plataforma
+     * @param imageUrl nueva URL de imagen
      */
-    public boolean isMultiplayer() {
-        return playerCount != null && playerCount > 1;
+    public void updateMetadata(String genre, String platform, String imageUrl) {
+        this.genre = genre;
+        this.platform = platform;
+        this.imageUrl = imageUrl;
     }
 
     /**
      * Verifica si el juego es de equipo.
      * 
-     * @return true si el juego requiere más de 2 jugadores
+     * @return true si requiere más de un jugador
      */
     public boolean isTeamGame() {
-        return playerCount != null && playerCount > 2;
+        return playerCount > 1;
+    }
+
+    /**
+     * Verifica si el juego tiene imagen configurada.
+     * 
+     * @return true si tiene URL de imagen
+     */
+    public boolean hasImage() {
+        return imageUrl != null && !imageUrl.trim().isEmpty();
+    }
+
+    /**
+     * Verifica si el juego está completamente configurado.
+     * 
+     * @return true si tiene toda la información básica
+     */
+    public boolean isFullyConfigured() {
+        return code != null && !code.trim().isEmpty() &&
+               fullName != null && !fullName.trim().isEmpty() &&
+               playerCount != null && playerCount > 0 &&
+               genre != null && !genre.trim().isEmpty() &&
+               platform != null && !platform.trim().isEmpty();
+    }
+
+    // ======================================================================
+    // GETTERS Y SETTERS
+    // ======================================================================
+
+    public String getCode() {
+        return code;
+    }
+
+    public void setCode(String code) {
+        this.code = code;
+    }
+
+    public String getFullName() {
+        return fullName;
+    }
+
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
+    }
+
+    public Integer getPlayerCount() {
+        return playerCount;
+    }
+
+    public void setPlayerCount(Integer playerCount) {
+        this.playerCount = playerCount;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
+    }
+
+    public String getGenre() {
+        return genre;
+    }
+
+    public void setGenre(String genre) {
+        this.genre = genre;
+    }
+
+    public String getPlatform() {
+        return platform;
+    }
+
+    public void setPlatform(String platform) {
+        this.platform = platform;
     }
 
     @Override
