@@ -1,188 +1,235 @@
 package com.esport.torneo.infrastructure.repository;
 
 import com.esport.torneo.domain.ticket.Ticket;
+import com.esport.torneo.domain.ticket.TicketStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Repositorio para la entidad Ticket.
+ * Repository interface for Ticket entity operations.
+ * Provides data access methods for ticket management.
  * 
- * Proporciona operaciones CRUD y consultas personalizadas
- * para gestionar los tickets de torneos.
- * 
- * @author Andrés Orduz Grimaldo
- * @version 1.0.0
- * @since 2024
+ * @author Andrés Orduz
+ * @version 1.0
  */
 @Repository
 public interface TicketRepository extends JpaRepository<Ticket, Long> {
 
     /**
-     * Busca un ticket por su código único.
+     * Find ticket by QR code.
      * 
-     * @param ticketCode el código del ticket
-     * @return el ticket si existe
+     * @param qrCode the QR code
+     * @return Optional containing the ticket if found
      */
-    Optional<Ticket> findByTicketCode(String ticketCode);
+    @Query("SELECT t FROM Ticket t WHERE t.qrCode = :qrCode AND t.deletedAt IS NULL")
+    Optional<Ticket> findByQrCode(@Param("qrCode") String qrCode);
 
     /**
-     * Busca tickets activos por código.
+     * Find ticket by unique code.
      * 
-     * @param ticketCode el código del ticket
-     * @return el ticket si existe y está activo
+     * @param uniqueCode the unique code
+     * @return Optional containing the ticket if found
      */
-    Optional<Ticket> findByTicketCodeAndActiveTrue(String ticketCode);
+    @Query("SELECT t FROM Ticket t WHERE t.uniqueCode = :uniqueCode AND t.deletedAt IS NULL")
+    Optional<Ticket> findByUniqueCode(@Param("uniqueCode") String uniqueCode);
 
     /**
-     * Busca tickets por usuario.
+     * Find all active tickets (not soft deleted).
      * 
-     * @param userId el ID del usuario
-     * @return lista de tickets del usuario
+     * @return List of active tickets
      */
-    List<Ticket> findByUserIdAndActiveTrueOrderByCreatedAtDesc(Long userId);
+    @Query("SELECT t FROM Ticket t WHERE t.deletedAt IS NULL ORDER BY t.createdAt DESC")
+    List<Ticket> findAllActive();
 
     /**
-     * Busca tickets por torneo.
+     * Find active tickets with pagination.
      * 
-     * @param tournamentId el ID del torneo
-     * @return lista de tickets del torneo
+     * @param pageable pagination information
+     * @return Page of active tickets
      */
-    List<Ticket> findByTournamentIdAndActiveTrueOrderByCreatedAtDesc(Long tournamentId);
+    @Query("SELECT t FROM Ticket t WHERE t.deletedAt IS NULL")
+    Page<Ticket> findAllActive(Pageable pageable);
 
     /**
-     * Busca tickets por estado.
+     * Find tickets by tournament ID.
      * 
-     * @param status el estado del ticket
-     * @return lista de tickets en el estado especificado
+     * @param tournamentId the tournament ID
+     * @param pageable pagination information
+     * @return Page of tickets for the tournament
      */
-    List<Ticket> findByStatusAndActiveTrueOrderByCreatedAtDesc(Ticket.TicketStatus status);
+    @Query("SELECT t FROM Ticket t WHERE t.tournamentId = :tournamentId AND t.deletedAt IS NULL ORDER BY t.createdAt DESC")
+    Page<Ticket> findByTournamentId(@Param("tournamentId") Long tournamentId, Pageable pageable);
 
     /**
-     * Busca tickets por usuario y torneo.
+     * Find tickets by user ID.
      * 
-     * @param userId el ID del usuario
-     * @param tournamentId el ID del torneo
-     * @return lista de tickets del usuario para el torneo
+     * @param userId the user ID
+     * @param pageable pagination information
+     * @return Page of tickets owned by the user
      */
-    List<Ticket> findByUserIdAndTournamentIdAndActiveTrue(Long userId, Long tournamentId);
+    @Query("SELECT t FROM Ticket t WHERE t.userId = :userId AND t.deletedAt IS NULL ORDER BY t.createdAt DESC")
+    Page<Ticket> findByUserId(@Param("userId") Long userId, Pageable pageable);
 
     /**
-     * Busca tickets válidos para uso (pagados y no expirados).
+     * Find tickets by status.
      * 
-     * @param now fecha y hora actual
-     * @return lista de tickets válidos
+     * @param status the ticket status
+     * @param pageable pagination information
+     * @return Page of tickets with specified status
      */
-    @Query("SELECT t FROM Ticket t WHERE t.active = true AND t.status = 'PAID' AND " +
-           "t.expirationDate > :now ORDER BY t.expirationDate")
-    List<Ticket> findValidTickets(@Param("now") LocalDateTime now);
+    @Query("SELECT t FROM Ticket t WHERE t.status = :status AND t.deletedAt IS NULL")
+    Page<Ticket> findByStatus(@Param("status") TicketStatus status, Pageable pageable);
 
     /**
-     * Busca tickets expirados que aún no han sido marcados como tal.
+     * Find tickets by tournament and user.
      * 
-     * @param now fecha y hora actual
-     * @return lista de tickets expirados
+     * @param tournamentId the tournament ID
+     * @param userId the user ID
+     * @return List of tickets for the tournament and user
      */
-    @Query("SELECT t FROM Ticket t WHERE t.active = true AND " +
-           "t.expirationDate <= :now AND t.status NOT IN ('EXPIRED', 'USED', 'CANCELLED') " +
-           "ORDER BY t.expirationDate")
-    List<Ticket> findExpiredTickets(@Param("now") LocalDateTime now);
+    @Query("SELECT t FROM Ticket t WHERE t.tournamentId = :tournamentId AND t.userId = :userId AND t.deletedAt IS NULL")
+    List<Ticket> findByTournamentIdAndUserId(@Param("tournamentId") Long tournamentId, @Param("userId") Long userId);
 
     /**
-     * Busca tickets próximos a expirar.
+     * Find expired tickets that haven't been processed.
      * 
-     * @param deadline fecha límite de expiración
-     * @return lista de tickets próximos a expirar
+     * @param currentDate current date and time
+     * @return List of expired tickets
      */
-    @Query("SELECT t FROM Ticket t WHERE t.active = true AND t.status = 'PAID' AND " +
-           "t.expirationDate <= :deadline AND t.expirationDate > CURRENT_TIMESTAMP " +
-           "ORDER BY t.expirationDate")
-    List<Ticket> findTicketsExpiringBy(@Param("deadline") LocalDateTime deadline);
+    @Query("SELECT t FROM Ticket t WHERE t.expiresAt <= :currentDate AND t.status IN ('RESERVED', 'PAID') AND t.deletedAt IS NULL")
+    List<Ticket> findExpiredTickets(@Param("currentDate") LocalDateTime currentDate);
 
     /**
-     * Busca tickets reservados sin pagar hace tiempo.
+     * Find tickets expiring soon (within specified hours).
      * 
-     * @param deadline fecha límite para reservas
-     * @return lista de tickets reservados vencidos
+     * @param expirationTime expiration threshold
+     * @return List of tickets expiring soon
      */
-    @Query("SELECT t FROM Ticket t WHERE t.active = true AND t.status = 'RESERVED' AND " +
-           "t.createdAt <= :deadline ORDER BY t.createdAt")
-    List<Ticket> findExpiredReservations(@Param("deadline") LocalDateTime deadline);
+    @Query("SELECT t FROM Ticket t WHERE t.expiresAt <= :expirationTime AND t.expiresAt > CURRENT_TIMESTAMP AND t.status = 'RESERVED' AND t.deletedAt IS NULL")
+    List<Ticket> findTicketsExpiringSoon(@Param("expirationTime") LocalDateTime expirationTime);
 
     /**
-     * Cuenta tickets por estado y torneo.
+     * Count tickets by tournament and status.
      * 
-     * @param tournamentId el ID del torneo
-     * @param status el estado del ticket
-     * @return número de tickets
+     * @param tournamentId the tournament ID
+     * @param status the ticket status
+     * @return number of tickets with the status for the tournament
      */
-    long countByTournamentIdAndStatusAndActiveTrue(Long tournamentId, Ticket.TicketStatus status);
+    @Query("SELECT COUNT(t) FROM Ticket t WHERE t.tournamentId = :tournamentId AND t.status = :status AND t.deletedAt IS NULL")
+    long countByTournamentIdAndStatus(@Param("tournamentId") Long tournamentId, @Param("status") TicketStatus status);
 
     /**
-     * Cuenta tickets por usuario y estado.
+     * Count tickets by user and status.
      * 
-     * @param userId el ID del usuario
-     * @param status el estado del ticket
-     * @return número de tickets
+     * @param userId the user ID
+     * @param status the ticket status
+     * @return number of tickets with the status for the user
      */
-    long countByUserIdAndStatusAndActiveTrue(Long userId, Ticket.TicketStatus status);
+    @Query("SELECT COUNT(t) FROM Ticket t WHERE t.userId = :userId AND t.status = :status AND t.deletedAt IS NULL")
+    long countByUserIdAndStatus(@Param("userId") Long userId, @Param("status") TicketStatus status);
 
     /**
-     * Verifica si existe un ticket con el código dado.
+     * Calculate total revenue for tournament.
      * 
-     * @param ticketCode el código a verificar
-     * @return true si existe
+     * @param tournamentId the tournament ID
+     * @return total revenue from paid tickets
      */
-    boolean existsByTicketCode(String ticketCode);
+    @Query("SELECT COALESCE(SUM(t.price), 0) FROM Ticket t WHERE t.tournamentId = :tournamentId AND t.status IN ('PAID', 'USED') AND t.deletedAt IS NULL")
+    BigDecimal calculateTournamentRevenue(@Param("tournamentId") Long tournamentId);
 
     /**
-     * Verifica si existe un ticket activo con el código dado.
+     * Calculate total commission for tournament.
      * 
-     * @param ticketCode el código a verificar
-     * @return true si existe y está activo
+     * @param tournamentId the tournament ID
+     * @return total commission from paid tickets
      */
-    boolean existsByTicketCodeAndActiveTrue(String ticketCode);
+    @Query("SELECT COALESCE(SUM(t.commissionAmount), 0) FROM Ticket t WHERE t.tournamentId = :tournamentId AND t.status IN ('PAID', 'USED') AND t.deletedAt IS NULL")
+    BigDecimal calculateTournamentCommission(@Param("tournamentId") Long tournamentId);
 
     /**
-     * Busca estadísticas de tickets por torneo.
+     * Find tickets by price range.
      * 
-     * @param tournamentId el ID del torneo
-     * @return estadísticas del torneo
+     * @param minPrice minimum price
+     * @param maxPrice maximum price
+     * @param pageable pagination information
+     * @return Page of tickets within price range
      */
-    @Query("SELECT " +
-           "COUNT(t) as total, " +
-           "SUM(CASE WHEN t.status = 'RESERVED' THEN 1 ELSE 0 END) as reserved, " +
-           "SUM(CASE WHEN t.status = 'PAID' THEN 1 ELSE 0 END) as paid, " +
-           "SUM(CASE WHEN t.status = 'USED' THEN 1 ELSE 0 END) as used, " +
-           "SUM(CASE WHEN t.status = 'EXPIRED' THEN 1 ELSE 0 END) as expired, " +
-           "SUM(CASE WHEN t.status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled, " +
-           "SUM(CASE WHEN t.status = 'PAID' THEN t.price ELSE 0 END) as revenue, " +
-           "SUM(CASE WHEN t.status = 'PAID' THEN t.commission ELSE 0 END) as commission " +
-           "FROM Ticket t WHERE t.tournamentId = :tournamentId AND t.active = true")
-    Object[] findTicketStatsByTournament(@Param("tournamentId") Long tournamentId);
+    @Query("SELECT t FROM Ticket t WHERE t.price >= :minPrice AND t.price <= :maxPrice AND t.deletedAt IS NULL")
+    Page<Ticket> findByPriceRange(@Param("minPrice") BigDecimal minPrice, @Param("maxPrice") BigDecimal maxPrice, Pageable pageable);
 
     /**
-     * Busca ingresos totales por torneo.
+     * Check if QR code exists (excluding specific ID).
      * 
-     * @param tournamentId el ID del torneo
-     * @return ingresos totales
+     * @param qrCode the QR code
+     * @param excludeId ID to exclude from search
+     * @return true if QR code exists
      */
-    @Query("SELECT SUM(t.price) FROM Ticket t WHERE t.tournamentId = :tournamentId AND " +
-           "t.status = 'PAID' AND t.active = true")
-    Optional<java.math.BigDecimal> findTotalRevenueByTournament(@Param("tournamentId") Long tournamentId);
+    @Query("SELECT COUNT(t) > 0 FROM Ticket t WHERE t.qrCode = :qrCode AND t.id != :excludeId AND t.deletedAt IS NULL")
+    boolean existsByQrCodeAndIdNot(@Param("qrCode") String qrCode, @Param("excludeId") Long excludeId);
 
     /**
-     * Busca comisión total por torneo.
+     * Check if unique code exists (excluding specific ID).
      * 
-     * @param tournamentId el ID del torneo
-     * @return comisión total
+     * @param uniqueCode the unique code
+     * @param excludeId ID to exclude from search
+     * @return true if unique code exists
      */
-    @Query("SELECT SUM(t.commission) FROM Ticket t WHERE t.tournamentId = :tournamentId AND " +
-           "t.status = 'PAID' AND t.active = true")
-    Optional<java.math.BigDecimal> findTotalCommissionByTournament(@Param("tournamentId") Long tournamentId);
+    @Query("SELECT COUNT(t) > 0 FROM Ticket t WHERE t.uniqueCode = :uniqueCode AND t.id != :excludeId AND t.deletedAt IS NULL")
+    boolean existsByUniqueCodeAndIdNot(@Param("uniqueCode") String uniqueCode, @Param("excludeId") Long excludeId);
+
+    /**
+     * Check if QR code exists.
+     * 
+     * @param qrCode the QR code
+     * @return true if QR code exists
+     */
+    @Query("SELECT COUNT(t) > 0 FROM Ticket t WHERE t.qrCode = :qrCode AND t.deletedAt IS NULL")
+    boolean existsByQrCode(@Param("qrCode") String qrCode);
+
+    /**
+     * Check if unique code exists.
+     * 
+     * @param uniqueCode the unique code
+     * @return true if unique code exists
+     */
+    @Query("SELECT COUNT(t) > 0 FROM Ticket t WHERE t.uniqueCode = :uniqueCode AND t.deletedAt IS NULL")
+    boolean existsByUniqueCode(@Param("uniqueCode") String uniqueCode);
+
+    /**
+     * Find tickets created within date range.
+     * 
+     * @param startDate start of date range
+     * @param endDate end of date range
+     * @param pageable pagination information
+     * @return Page of tickets created within the date range
+     */
+    @Query("SELECT t FROM Ticket t WHERE t.createdAt >= :startDate AND t.createdAt <= :endDate AND t.deletedAt IS NULL ORDER BY t.createdAt DESC")
+    Page<Ticket> findByCreatedAtBetween(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate, Pageable pageable);
+
+    /**
+     * Count active tickets.
+     * 
+     * @return number of active tickets
+     */
+    @Query("SELECT COUNT(t) FROM Ticket t WHERE t.deletedAt IS NULL")
+    long countActive();
+
+    /**
+     * Find user's free tickets for tournament.
+     * 
+     * @param userId the user ID
+     * @param tournamentId the tournament ID
+     * @return List of free tickets for the user and tournament
+     */
+    @Query("SELECT t FROM Ticket t WHERE t.userId = :userId AND t.tournamentId = :tournamentId AND t.price = 0 AND t.deletedAt IS NULL")
+    List<Ticket> findFreeTicketsByUserAndTournament(@Param("userId") Long userId, @Param("tournamentId") Long tournamentId);
 } 

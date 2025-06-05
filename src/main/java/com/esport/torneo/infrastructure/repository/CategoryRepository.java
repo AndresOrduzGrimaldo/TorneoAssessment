@@ -1,109 +1,87 @@
 package com.esport.torneo.infrastructure.repository;
 
-import com.esport.torneo.domain.category.Category;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
-import java.util.Optional;
+import com.esport.torneo.domain.category.Category;
 
 /**
- * Repositorio para la entidad Category.
+ * Repository interface for Category entity operations.
+ * Provides data access methods for category management.
  * 
- * Proporciona operaciones CRUD y consultas personalizadas
- * para gestionar las categorías de torneos.
- * 
- * @author Andrés Orduz Grimaldo
- * @version 1.0.0
- * @since 2024
+ * @author Andrés Orduz
+ * @version 1.0
  */
 @Repository
 public interface CategoryRepository extends JpaRepository<Category, Long> {
 
     /**
-     * Busca una categoría activa por ID.
+     * Find category by code (case insensitive).
      * 
-     * @param id el ID de la categoría
-     * @return la categoría si existe y está activa
+     * @param code the category code
+     * @return Optional containing the category if found
      */
-    Optional<Category> findByIdAndActiveTrue(Long id);
+    @Query("SELECT c FROM Category c WHERE UPPER(c.code) = UPPER(:code) AND c.deletedAt IS NULL")
+    Optional<Category> findByCodeIgnoreCase(@Param("code") String code);
 
     /**
-     * Busca una categoría por su código único.
+     * Find all active categories (not soft deleted).
      * 
-     * @param code el código de la categoría
-     * @return la categoría si existe
+     * @return List of active categories
      */
-    Optional<Category> findByCode(String code);
+    @Query("SELECT c FROM Category c WHERE c.deletedAt IS NULL ORDER BY c.description")
+    List<Category> findAllActive();
 
     /**
-     * Busca una categoría activa por su código.
+     * Find active categories with pagination.
      * 
-     * @param code el código de la categoría
-     * @return la categoría si existe y está activa
+     * @param pageable pagination information
+     * @return Page of active categories
      */
-    Optional<Category> findByCodeAndActiveTrue(String code);
+    @Query("SELECT c FROM Category c WHERE c.deletedAt IS NULL")
+    Page<Category> findAllActive(Pageable pageable);
 
     /**
-     * Busca categorías activas ordenadas por descripción.
+     * Search categories by description containing text (case insensitive).
      * 
-     * @return lista de categorías activas
+     * @param description text to search in description
+     * @param pageable pagination information
+     * @return Page of matching categories
      */
-    List<Category> findByActiveTrueOrderByDescription();
+    @Query("SELECT c FROM Category c WHERE UPPER(c.description) LIKE UPPER(CONCAT('%', :description, '%')) AND c.deletedAt IS NULL")
+    Page<Category> findByDescriptionContainingIgnoreCase(@Param("description") String description, Pageable pageable);
 
     /**
-     * Busca categorías por descripción parcial (case insensitive).
+     * Check if category code exists (excluding specific ID).
      * 
-     * @param description texto a buscar en la descripción
-     * @return lista de categorías que coinciden
+     * @param code the category code
+     * @param excludeId ID to exclude from search
+     * @return true if code exists
      */
-    @Query("SELECT c FROM Category c WHERE c.active = true AND " +
-           "LOWER(c.description) LIKE LOWER(CONCAT('%', :description, '%')) " +
-           "ORDER BY c.description")
-    List<Category> findByDescriptionContainingIgnoreCase(@Param("description") String description);
+    @Query("SELECT COUNT(c) > 0 FROM Category c WHERE UPPER(c.code) = UPPER(:code) AND c.id != :excludeId AND c.deletedAt IS NULL")
+    boolean existsByCodeIgnoreCaseAndIdNot(@Param("code") String code, @Param("excludeId") Long excludeId);
 
     /**
-     * Busca categorías por alias parcial (case insensitive).
+     * Check if category code exists.
      * 
-     * @param alias texto a buscar en el alias
-     * @return lista de categorías que coinciden
+     * @param code the category code
+     * @return true if code exists
      */
-    @Query("SELECT c FROM Category c WHERE c.active = true AND c.alias IS NOT NULL AND " +
-           "LOWER(c.alias) LIKE LOWER(CONCAT('%', :alias, '%')) " +
-           "ORDER BY c.alias")
-    List<Category> findByAliasContainingIgnoreCase(@Param("alias") String alias);
+    @Query("SELECT COUNT(c) > 0 FROM Category c WHERE UPPER(c.code) = UPPER(:code) AND c.deletedAt IS NULL")
+    boolean existsByCodeIgnoreCase(@Param("code") String code);
 
     /**
-     * Verifica si existe una categoría con el código dado.
+     * Count active categories.
      * 
-     * @param code el código a verificar
-     * @return true si existe
+     * @return number of active categories
      */
-    boolean existsByCode(String code);
-
-    /**
-     * Verifica si existe una categoría activa con el código dado.
-     * 
-     * @param code el código a verificar
-     * @return true si existe y está activa
-     */
-    boolean existsByCodeAndActiveTrue(String code);
-
-    /**
-     * Cuenta las categorías activas.
-     * 
-     * @return número de categorías activas
-     */
-    long countByActiveTrue();
-
-    /**
-     * Busca categorías con alias definido.
-     * 
-     * @return lista de categorías con alias
-     */
-    @Query("SELECT c FROM Category c WHERE c.active = true AND c.alias IS NOT NULL " +
-           "AND c.alias != '' ORDER BY c.alias")
-    List<Category> findCategoriesWithAlias();
+    @Query("SELECT COUNT(c) FROM Category c WHERE c.deletedAt IS NULL")
+    long countActive();
 } 
