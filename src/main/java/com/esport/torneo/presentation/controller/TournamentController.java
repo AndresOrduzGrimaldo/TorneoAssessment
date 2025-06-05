@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -26,7 +27,8 @@ import com.esport.torneo.application.dto.TournamentDto;
 import com.esport.torneo.application.dto.TournamentUpdateDto;
 import com.esport.torneo.application.service.TournamentApplicationService;
 import com.esport.torneo.application.service.TournamentApplicationService.TournamentStatsDto;
-import com.esport.torneo.domain.tournament.Tournament.TournamentStatus;
+import com.esport.torneo.domain.tournament.TournamentStatus;
+import com.esport.torneo.infrastructure.config.RedisConfig;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -152,6 +154,7 @@ public class TournamentController {
     @GetMapping
     @Operation(summary = "Obtener todos los torneos", description = "Obtiene una lista paginada de todos los torneos")
     @ApiResponse(responseCode = "200", description = "Lista de torneos obtenida exitosamente")
+    @Cacheable(value = RedisConfig.TOURNAMENTS_CACHE, key = "'all_page_' + #pageable.pageNumber + '_' + #pageable.pageSize")
     public ResponseEntity<Page<TournamentDto>> getAllTournaments(
             @PageableDefault(size = 20) Pageable pageable) {
         

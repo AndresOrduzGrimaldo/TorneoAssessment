@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,12 +24,21 @@ import com.esport.torneo.application.service.TicketApplicationService;
 import com.esport.torneo.application.service.TicketApplicationService.TicketStatsDto;
 import com.esport.torneo.application.service.TicketApplicationService.TicketValidationDto;
 import com.esport.torneo.domain.ticket.Ticket.TicketStatus;
+import com.esport.torneo.infrastructure.config.RedisConfig;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 
 /**
  * Controlador REST para la gestión de tickets.
@@ -101,21 +111,24 @@ public class TicketController {
      * @return el ticket encontrado
      */
     @GetMapping("/{id}")
-    @Operation(summary = "Obtener ticket por ID", description = "Obtiene un ticket específico por su ID")
+    @Operation(
+        summary = "Get ticket by ID",
+        description = "Retrieve a specific ticket by its unique identifier"
+    )
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Ticket encontrado"),
-        @ApiResponse(responseCode = "404", description = "Ticket no encontrado")
+        @ApiResponse(responseCode = "200", description = "Ticket found",
+                    content = @Content(schema = @Schema(implementation = TicketDto.class))),
+        @ApiResponse(responseCode = "404", description = "Ticket not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
     })
+    @Cacheable(value = RedisConfig.TICKETS_CACHE, key = "'by_id_' + #id")
     public ResponseEntity<TicketDto> getTicketById(
-            @Parameter(description = "ID del ticket") @PathVariable Long id) {
-        
-        logger.debug("Obteniendo ticket por ID: {}", id);
-        
+            @Parameter(description = "Ticket ID", required = true)
+            @PathVariable Long id) {
         try {
             TicketDto ticket = ticketApplicationService.getTicketById(id);
             return ResponseEntity.ok(ticket);
         } catch (IllegalArgumentException e) {
-            logger.warn("Ticket no encontrado: {}", id);
             return ResponseEntity.notFound().build();
         }
     }
@@ -174,16 +187,35 @@ public class TicketController {
      * @return página de tickets del torneo
      */
     @GetMapping("/tournament/{tournamentId}")
-    @Operation(summary = "Obtener tickets de torneo", description = "Obtiene todos los tickets de un torneo específico")
-    @ApiResponse(responseCode = "200", description = "Lista de tickets obtenida exitosamente")
-    public ResponseEntity<Page<TicketDto>> getTournamentTickets(
-            @Parameter(description = "ID del torneo") @PathVariable Long tournamentId,
+    @Operation(
+        summary = "Get tickets by tournament",
+        description = "Retrieve tickets for a specific tournament. Requires ORGANIZER or ADMIN role."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Tickets retrieved successfully"),
+        @ApiResponse(responseCode = "401", description = "Authentication required"),
+        @ApiResponse(responseCode = "403", description = "Access denied"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("hasRole('ORGANIZER') or hasRole('ADMIN')")
+    public ResponseEntity<Page<TicketDto>> getTicketsByTournament(
+            @Parameter(description = "Tournament ID", required = true)
+            @PathVariable Long tournamentId,
             @PageableDefault(size = 20) Pageable pageable) {
         
-        logger.debug("Obteniendo tickets del torneo: {}", tournamentId);
+        List<TicketDto> tickets = ticketApplicationService.getTicketsByTournament(tournamentId);
         
-        Page<TicketDto> tickets = ticketApplicationService.getTournamentTickets(tournamentId, pageable);
-        return ResponseEntity.ok(tickets);
+        // Create a page from the list
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), tickets.size());
+        Page<TicketDto> ticketsPage = new PageImpl<>(
+            tickets.subList(start, end), 
+            pageable, 
+            tickets.size()
+        );
+        
+        return ResponseEntity.ok(ticketsPage);
     }
 
     /**
@@ -194,16 +226,41 @@ public class TicketController {
      * @return página de tickets con el estado especificado
      */
     @GetMapping("/status/{status}")
-    @Operation(summary = "Obtener tickets por estado", description = "Obtiene tickets filtrados por estado")
-    @ApiResponse(responseCode = "200", description = "Lista de tickets obtenida exitosamente")
+    @Operation(
+        summary = "Get tickets by status",
+        description = "Retrieve tickets filtered by status. Requires ADMIN role."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Tickets retrieved successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid status"),
+        @ApiResponse(responseCode = "401", description = "Authentication required"),
+        @ApiResponse(responseCode = "403", description = "Admin access required"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Page<TicketDto>> getTicketsByStatus(
-            @Parameter(description = "Estado del ticket") @PathVariable TicketStatus status,
+            @Parameter(description = "Ticket status", required = true)
+            @PathVariable String status,
             @PageableDefault(size = 20) Pageable pageable) {
         
-        logger.debug("Obteniendo tickets por estado: {}", status);
-        
-        Page<TicketDto> tickets = ticketApplicationService.getTicketsByStatus(status, pageable);
-        return ResponseEntity.ok(tickets);
+        try {
+            TicketStatus ticketStatus = TicketStatus.valueOf(status.toUpperCase());
+            List<TicketDto> tickets = ticketApplicationService.getTicketsByStatus(ticketStatus);
+            
+            // Create a page from the list
+            int start = (int) pageable.getOffset();
+            int end = Math.min((start + pageable.getPageSize()), tickets.size());
+            Page<TicketDto> ticketsPage = new PageImpl<>(
+                tickets.subList(start, end), 
+                pageable, 
+                tickets.size()
+            );
+            
+            return ResponseEntity.ok(ticketsPage);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     /**
@@ -269,22 +326,37 @@ public class TicketController {
      * @return el ticket cancelado
      */
     @PutMapping("/{ticketId}/cancel")
-    @Operation(summary = "Cancelar ticket", description = "Cancela un ticket y procesa reembolso")
+    @Operation(
+        summary = "Cancel ticket",
+        description = "Cancel a ticket. Users can cancel their own tickets, organizers and admins can cancel any ticket."
+    )
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Ticket cancelado exitosamente"),
-        @ApiResponse(responseCode = "400", description = "No se puede cancelar el ticket"),
-        @ApiResponse(responseCode = "404", description = "Ticket no encontrado")
+        @ApiResponse(responseCode = "200", description = "Ticket cancelled successfully",
+                    content = @Content(schema = @Schema(implementation = TicketDto.class))),
+        @ApiResponse(responseCode = "400", description = "Ticket cannot be cancelled"),
+        @ApiResponse(responseCode = "401", description = "Authentication required"),
+        @ApiResponse(responseCode = "403", description = "Access denied"),
+        @ApiResponse(responseCode = "404", description = "Ticket not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
     })
+    @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("isAuthenticated()")
+    @CacheEvict(value = RedisConfig.TICKETS_CACHE, allEntries = true)
     public ResponseEntity<TicketDto> cancelTicket(
-            @Parameter(description = "ID del ticket") @PathVariable Long ticketId) {
-        
-        logger.info("Cancelando ticket: {}", ticketId);
-        
+            @Parameter(description = "Ticket ID", required = true)
+            @PathVariable Long ticketId,
+            Authentication authentication) {
         try {
-            TicketDto cancelledTicket = ticketApplicationService.cancelTicket(ticketId);
-            return ResponseEntity.ok(cancelledTicket);
+            // Check if user owns the ticket or has admin/organizer role
+            if (!canCancelTicket(ticketId, authentication)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            
+            TicketDto ticket = ticketApplicationService.cancelTicket(ticketId);
+            return ResponseEntity.ok(ticket);
         } catch (IllegalArgumentException e) {
-            logger.warn("Error cancelando ticket: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().build();
         }
     }
@@ -330,12 +402,51 @@ public class TicketController {
      * @return estadísticas generales de tickets
      */
     @GetMapping("/stats")
-    @Operation(summary = "Obtener estadísticas de tickets", description = "Obtiene estadísticas generales sobre los tickets del sistema")
-    @ApiResponse(responseCode = "200", description = "Estadísticas obtenidas exitosamente")
-    public ResponseEntity<TicketStatsDto> getTicketStats() {
-        logger.debug("Obteniendo estadísticas de tickets");
-        
-        TicketStatsDto stats = ticketApplicationService.getTicketStats();
+    @Operation(
+        summary = "Get ticket statistics",
+        description = "Get statistics about tickets. Requires ADMIN role."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Statistics retrieved successfully"),
+        @ApiResponse(responseCode = "401", description = "Authentication required"),
+        @ApiResponse(responseCode = "403", description = "Admin access required"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Object> getTicketStats() {
+        Object stats = ticketApplicationService.getTicketStats();
         return ResponseEntity.ok(stats);
+    }
+
+    /**
+     * Extract user ID from authentication context.
+     */
+    private Long extractUserIdFromAuthentication(Authentication authentication) {
+        // This is a simplified implementation
+        // In a real application, you would extract the user ID from the JWT token
+        // or from the principal object
+        return 1L; // Placeholder - implement proper user ID extraction
+    }
+
+    /**
+     * Check if the authenticated user can cancel the ticket.
+     */
+    private boolean canCancelTicket(Long ticketId, Authentication authentication) {
+        // Check if user has admin or organizer role
+        if (authentication.getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_ADMIN") || 
+                                 auth.getAuthority().equals("ROLE_ORGANIZER"))) {
+            return true;
+        }
+        
+        // Check if user owns the ticket
+        try {
+            TicketDto ticket = ticketApplicationService.getTicketById(ticketId);
+            Long currentUserId = extractUserIdFromAuthentication(authentication);
+            return ticket.getUserId().equals(currentUserId);
+        } catch (Exception e) {
+            return false;
+        }
     }
 } 

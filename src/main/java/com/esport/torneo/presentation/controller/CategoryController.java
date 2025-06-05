@@ -4,6 +4,12 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,9 +26,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.esport.torneo.application.dto.CategoryDto;
 import com.esport.torneo.application.service.CategoryApplicationService;
+import com.esport.torneo.infrastructure.config.RedisConfig;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -30,20 +39,15 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 /**
- * Controlador REST para gestión de categorías de torneos.
+ * REST Controller for Category management.
+ * Provides endpoints for CRUD operations on tournament categories.
  * 
- * Proporciona endpoints para:
- * - CRUD completo de categorías
- * - Búsquedas y filtros
- * - Gestión de estado activo/inactivo
- * 
- * @author Andrés Orduz Grimaldo
- * @version 1.0.0
- * @since 2024
+ * @author Andrés Orduz
+ * @version 1.0
  */
 @RestController
 @RequestMapping("/api/v1/categories")
-@Tag(name = "Categories", description = "Gestión de categorías de torneos")
+@Tag(name = "Categories", description = "Tournament category management APIs")
 @CrossOrigin(origins = "*", maxAge = 3600)
 public class CategoryController {
 
@@ -61,222 +65,230 @@ public class CategoryController {
     }
 
     /**
-     * Obtiene todas las categorías activas.
-     * 
-     * @return lista de categorías activas
+     * Get all categories with pagination.
      */
     @GetMapping
-    @Operation(summary = "Listar categorías", description = "Obtiene todas las categorías activas")
+    @Operation(
+        summary = "Get all categories",
+        description = "Retrieve a paginated list of all active tournament categories"
+    )
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Lista de categorías obtenida exitosamente"),
-        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
+        @ApiResponse(responseCode = "200", description = "Categories retrieved successfully",
+                    content = @Content(schema = @Schema(implementation = Page.class))),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<List<CategoryDto>> getAllCategories() {
-        logger.info("Obteniendo todas las categorías activas");
+    @Cacheable(value = RedisConfig.CATEGORIES_CACHE, key = "'all_page_' + #pageable.pageNumber + '_' + #pageable.pageSize")
+    public ResponseEntity<Page<CategoryDto>> getAllCategories(
+            @PageableDefault(size = 20) Pageable pageable) {
+        List<CategoryDto> categories = categoryApplicationService.getAllActiveCategories();
         
-        try {
-            List<CategoryDto> categories = categoryApplicationService.getAllActiveCategories();
-            logger.info("Se encontraron {} categorías activas", categories.size());
-            return ResponseEntity.ok(categories);
-        } catch (Exception e) {
-            logger.error("Error obteniendo categorías: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+        // Create a page from the list
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), categories.size());
+        Page<CategoryDto> categoriesPage = new PageImpl<>(
+            categories.subList(start, end), 
+            pageable, 
+            categories.size()
+        );
+        
+        return ResponseEntity.ok(categoriesPage);
     }
 
     /**
-     * Obtiene una categoría por ID.
-     * 
-     * @param id ID de la categoría
-     * @return la categoría encontrada
+     * Get all categories as a simple list (for dropdowns).
+     */
+    @GetMapping("/list")
+    @Operation(
+        summary = "Get categories list",
+        description = "Retrieve a simple list of all active categories for dropdown/select components"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Categories list retrieved successfully"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @Cacheable(value = RedisConfig.CATEGORIES_CACHE, key = "'all_list'")
+    public ResponseEntity<List<CategoryDto>> getCategoriesList() {
+        List<CategoryDto> categories = categoryApplicationService.getAllActiveCategories();
+        return ResponseEntity.ok(categories);
+    }
+
+    /**
+     * Get category by ID.
      */
     @GetMapping("/{id}")
-    @Operation(summary = "Obtener categoría", description = "Obtiene una categoría específica por ID")
+    @Operation(
+        summary = "Get category by ID",
+        description = "Retrieve a specific category by its unique identifier"
+    )
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Categoría encontrada"),
-        @ApiResponse(responseCode = "404", description = "Categoría no encontrada"),
-        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
+        @ApiResponse(responseCode = "200", description = "Category found",
+                    content = @Content(schema = @Schema(implementation = CategoryDto.class))),
+        @ApiResponse(responseCode = "404", description = "Category not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
     })
+    @Cacheable(value = RedisConfig.CATEGORIES_CACHE, key = "'by_id_' + #id")
     public ResponseEntity<CategoryDto> getCategoryById(
-            @Parameter(description = "ID de la categoría") @PathVariable Long id) {
-        
-        logger.info("Obteniendo categoría con ID: {}", id);
-        
+            @Parameter(description = "Category ID", required = true)
+            @PathVariable Long id) {
         try {
             CategoryDto category = categoryApplicationService.getCategoryById(id);
             return ResponseEntity.ok(category);
         } catch (IllegalArgumentException e) {
-            logger.warn("Categoría no encontrada con ID: {}", id);
             return ResponseEntity.notFound().build();
-        } catch (Exception e) {
-            logger.error("Error obteniendo categoría {}: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
     /**
-     * Crea una nueva categoría.
-     * 
-     * @param categoryDto datos de la categoría a crear
-     * @return la categoría creada
-     */
-    @PostMapping
-    @Operation(summary = "Crear categoría", description = "Crea una nueva categoría de torneo")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "201", description = "Categoría creada exitosamente"),
-        @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos"),
-        @ApiResponse(responseCode = "409", description = "Categoría ya existe"),
-        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
-    })
-    @SecurityRequirement(name = "bearerAuth")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<CategoryDto> createCategory(
-            @Parameter(description = "Datos de la categoría") @Valid @RequestBody CategoryDto categoryDto) {
-        
-        logger.info("Creando nueva categoría: {}", categoryDto.getCode());
-        
-        try {
-            CategoryDto createdCategory = categoryApplicationService.createCategory(categoryDto);
-            logger.info("Categoría creada exitosamente con ID: {}", createdCategory.getId());
-            return ResponseEntity.status(HttpStatus.CREATED).body(createdCategory);
-        } catch (IllegalArgumentException e) {
-            logger.warn("Error creando categoría: {}", e.getMessage());
-            return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
-            logger.error("Error interno creando categoría: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-
-    /**
-     * Actualiza una categoría existente.
-     * 
-     * @param id ID de la categoría
-     * @param categoryDto datos actualizados
-     * @return la categoría actualizada
-     */
-    @PutMapping("/{id}")
-    @Operation(summary = "Actualizar categoría", description = "Actualiza una categoría existente")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Categoría actualizada exitosamente"),
-        @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos"),
-        @ApiResponse(responseCode = "404", description = "Categoría no encontrada"),
-        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
-    })
-    @SecurityRequirement(name = "bearerAuth")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<CategoryDto> updateCategory(
-            @Parameter(description = "ID de la categoría") @PathVariable Long id,
-            @Parameter(description = "Datos actualizados") @Valid @RequestBody CategoryDto categoryDto) {
-        
-        logger.info("Actualizando categoría con ID: {}", id);
-        
-        try {
-            CategoryDto updatedCategory = categoryApplicationService.updateCategory(id, categoryDto);
-            logger.info("Categoría {} actualizada exitosamente", id);
-            return ResponseEntity.ok(updatedCategory);
-        } catch (IllegalArgumentException e) {
-            logger.warn("Error actualizando categoría {}: {}", id, e.getMessage());
-            return ResponseEntity.notFound().build();
-        } catch (Exception e) {
-            logger.error("Error interno actualizando categoría {}: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-
-    /**
-     * Elimina una categoría (soft delete).
-     * 
-     * @param id ID de la categoría
-     * @return confirmación de eliminación
-     */
-    @DeleteMapping("/{id}")
-    @Operation(summary = "Eliminar categoría", description = "Elimina una categoría (soft delete)")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "204", description = "Categoría eliminada exitosamente"),
-        @ApiResponse(responseCode = "404", description = "Categoría no encontrada"),
-        @ApiResponse(responseCode = "409", description = "Categoría en uso, no se puede eliminar"),
-        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
-    })
-    @SecurityRequirement(name = "bearerAuth")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> deleteCategory(
-            @Parameter(description = "ID de la categoría") @PathVariable Long id) {
-        
-        logger.info("Eliminando categoría con ID: {}", id);
-        
-        try {
-            categoryApplicationService.deleteCategory(id);
-            logger.info("Categoría {} eliminada exitosamente", id);
-            return ResponseEntity.noContent().build();
-        } catch (IllegalArgumentException e) {
-            logger.warn("Categoría no encontrada para eliminar: {}", id);
-            return ResponseEntity.notFound().build();
-        } catch (IllegalStateException e) {
-            logger.warn("Categoría {} en uso, no se puede eliminar: {}", id, e.getMessage());
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        } catch (Exception e) {
-            logger.error("Error interno eliminando categoría {}: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-
-    /**
-     * Busca categorías por descripción.
-     * 
-     * @param description texto a buscar en la descripción
-     * @return lista de categorías que coinciden
+     * Search categories by description.
      */
     @GetMapping("/search")
-    @Operation(summary = "Buscar categorías", description = "Busca categorías por descripción")
+    @Operation(
+        summary = "Search categories",
+        description = "Search categories by description (case insensitive, partial match)"
+    )
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Búsqueda realizada exitosamente"),
-        @ApiResponse(responseCode = "400", description = "Parámetros de búsqueda inválidos"),
-        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
+        @ApiResponse(responseCode = "200", description = "Search completed successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid search parameters"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    public ResponseEntity<List<CategoryDto>> searchCategories(
-            @Parameter(description = "Texto a buscar en la descripción") 
-            @RequestParam String description) {
-        
-        logger.info("Buscando categorías con descripción: {}", description);
+    public ResponseEntity<Page<CategoryDto>> searchCategories(
+            @Parameter(description = "Search term for category description")
+            @RequestParam String description,
+            @PageableDefault(size = 20) Pageable pageable) {
         
         if (description == null || description.trim().isEmpty()) {
-            logger.warn("Parámetro de búsqueda vacío");
             return ResponseEntity.badRequest().build();
         }
         
+        List<CategoryDto> categories = categoryApplicationService.searchCategoriesByDescription(description);
+        
+        // Create a page from the list
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), categories.size());
+        Page<CategoryDto> categoriesPage = new PageImpl<>(
+            categories.subList(start, end), 
+            pageable, 
+            categories.size()
+        );
+        
+        return ResponseEntity.ok(categoriesPage);
+    }
+
+    /**
+     * Create a new category.
+     */
+    @PostMapping
+    @Operation(
+        summary = "Create category",
+        description = "Create a new tournament category. Requires ADMIN role."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Category created successfully",
+                    content = @Content(schema = @Schema(implementation = CategoryDto.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid input data"),
+        @ApiResponse(responseCode = "401", description = "Authentication required"),
+        @ApiResponse(responseCode = "403", description = "Admin access required"),
+        @ApiResponse(responseCode = "409", description = "Category code already exists"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("hasRole('ADMIN')")
+    @CacheEvict(value = RedisConfig.CATEGORIES_CACHE, allEntries = true)
+    public ResponseEntity<CategoryDto> createCategory(
+            @Parameter(description = "Category data", required = true)
+            @Valid @RequestBody CategoryDto request) {
         try {
-            List<CategoryDto> categories = categoryApplicationService.searchCategoriesByDescription(description);
-            logger.info("Se encontraron {} categorías con descripción '{}'", categories.size(), description);
-            return ResponseEntity.ok(categories);
-        } catch (Exception e) {
-            logger.error("Error buscando categorías: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            CategoryDto category = categoryApplicationService.createCategory(request);
+            return ResponseEntity.status(HttpStatus.CREATED).body(category);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
     }
 
     /**
-     * Obtiene estadísticas de categorías.
-     * 
-     * @return estadísticas de uso de categorías
+     * Update an existing category.
      */
-    @GetMapping("/stats")
-    @Operation(summary = "Estadísticas de categorías", description = "Obtiene estadísticas de uso de categorías")
+    @PutMapping("/{id}")
+    @Operation(
+        summary = "Update category",
+        description = "Update an existing tournament category. Requires ADMIN role."
+    )
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Estadísticas obtenidas exitosamente"),
-        @ApiResponse(responseCode = "500", description = "Error interno del servidor")
+        @ApiResponse(responseCode = "200", description = "Category updated successfully",
+                    content = @Content(schema = @Schema(implementation = CategoryDto.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid input data"),
+        @ApiResponse(responseCode = "401", description = "Authentication required"),
+        @ApiResponse(responseCode = "403", description = "Admin access required"),
+        @ApiResponse(responseCode = "404", description = "Category not found"),
+        @ApiResponse(responseCode = "409", description = "Category code already exists"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
     })
     @SecurityRequirement(name = "bearerAuth")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('ORGANIZER')")
-    public ResponseEntity<Object> getCategoryStats() {
-        logger.info("Obteniendo estadísticas de categorías");
-        
+    @PreAuthorize("hasRole('ADMIN')")
+    @CacheEvict(value = RedisConfig.CATEGORIES_CACHE, allEntries = true)
+    public ResponseEntity<CategoryDto> updateCategory(
+            @Parameter(description = "Category ID", required = true)
+            @PathVariable Long id,
+            @Parameter(description = "Updated category data", required = true)
+            @Valid @RequestBody CategoryDto request) {
         try {
-            Object stats = categoryApplicationService.getCategoryStats();
-            return ResponseEntity.ok(stats);
-        } catch (Exception e) {
-            logger.error("Error obteniendo estadísticas de categorías: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            CategoryDto category = categoryApplicationService.updateCategory(id, request);
+            return ResponseEntity.ok(category);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
         }
+    }
+
+    /**
+     * Delete a category (soft delete).
+     */
+    @DeleteMapping("/{id}")
+    @Operation(
+        summary = "Delete category",
+        description = "Soft delete a tournament category. Requires ADMIN role."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "204", description = "Category deleted successfully"),
+        @ApiResponse(responseCode = "401", description = "Authentication required"),
+        @ApiResponse(responseCode = "403", description = "Admin access required"),
+        @ApiResponse(responseCode = "404", description = "Category not found"),
+        @ApiResponse(responseCode = "409", description = "Category is being used by tournaments"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("hasRole('ADMIN')")
+    @CacheEvict(value = RedisConfig.CATEGORIES_CACHE, allEntries = true)
+    public ResponseEntity<Void> deleteCategory(
+            @Parameter(description = "Category ID", required = true)
+            @PathVariable Long id) {
+        try {
+            categoryApplicationService.deleteCategory(id);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+    }
+
+    /**
+     * Get category statistics.
+     */
+    @GetMapping("/stats")
+    @Operation(
+        summary = "Get category statistics",
+        description = "Get statistics about categories usage. Requires ADMIN role."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Statistics retrieved successfully"),
+        @ApiResponse(responseCode = "401", description = "Authentication required"),
+        @ApiResponse(responseCode = "403", description = "Admin access required"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Object> getCategoryStats() {
+        Object stats = categoryApplicationService.getCategoryStats();
+        return ResponseEntity.ok(stats);
     }
 } 
