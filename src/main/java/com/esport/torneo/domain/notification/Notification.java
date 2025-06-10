@@ -14,7 +14,6 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -22,97 +21,28 @@ import jakarta.validation.constraints.Size;
 /**
  * Entidad que representa una notificación en el sistema.
  * 
- * Las notificaciones pueden ser de diferentes tipos:
- * - EMAIL: Notificaciones por correo electrónico
- * - WEBSOCKET: Notificaciones en tiempo real
- * - PUSH: Notificaciones push móviles
+ * Una notificación es un mensaje que se envía a un usuario específico
+ * con información relevante sobre eventos del sistema como:
+ * - Confirmación de registro en torneo
+ * - Inicio de torneo
+ * - Resultados de partidas
+ * - Actualizaciones de estado
  * 
- * Incluye funcionalidad para:
- * - Gestión de estados de envío
- * - Reintentos automáticos
- * - Seguimiento de lectura
- * - Manejo de errores
- * 
- * @author Andrés Orduz Grimaldo
- * @version 1.0.0
- * @since 2024
+ * @author Andrés Orduz
+ * @version 1.0
+ * @since 1.0
  */
 @Entity
 @Table(name = "notifications", indexes = {
-    @Index(name = "idx_notification_user", columnList = "user_id"),
-    @Index(name = "idx_notification_tournament", columnList = "tournament_id"),
-    @Index(name = "idx_notification_type", columnList = "type"),
+    @Index(name = "idx_notification_user_id", columnList = "user_id"),
     @Index(name = "idx_notification_status", columnList = "status"),
-    @Index(name = "idx_notification_created", columnList = "created_at")
+    @Index(name = "idx_notification_type", columnList = "type"),
+    @Index(name = "idx_notification_created_at", columnList = "created_at")
 })
 public class Notification extends BaseEntity {
 
     /**
-     * Tipos de notificación disponibles.
-     */
-    public enum NotificationType {
-        EMAIL("Email"),
-        WEBSOCKET("WebSocket"),
-        PUSH("Push");
-
-        private final String displayName;
-
-        NotificationType(String displayName) {
-            this.displayName = displayName;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
-    }
-
-    /**
-     * Estados posibles de una notificación.
-     */
-    public enum NotificationStatus {
-        PENDING("Pendiente"),
-        SENT("Enviada"),
-        FAILED("Fallida"),
-        READ("Leída");
-
-        private final String displayName;
-
-        NotificationStatus(String displayName) {
-            this.displayName = displayName;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
-
-        /**
-         * Verifica si se puede transicionar a un nuevo estado.
-         * 
-         * @param newStatus el nuevo estado
-         * @return true si la transición es válida
-         */
-        public boolean canTransitionTo(NotificationStatus newStatus) {
-            if (this == newStatus) {
-                return false;
-            }
-            
-            switch (this) {
-                case PENDING:
-                    return newStatus == SENT || newStatus == FAILED;
-                case SENT:
-                    return newStatus == READ;
-                case FAILED:
-                    return newStatus == SENT || newStatus == PENDING; // Permitir reintentos
-                case READ:
-                    return false; // Estado final
-                default:
-                    return false;
-            }
-        }
-    }
-
-    /**
-     * ID del usuario destinatario.
+     * ID del usuario destinatario de la notificación.
      */
     @NotNull(message = "El usuario es obligatorio")
     @Column(name = "user_id", nullable = false)
@@ -130,56 +60,82 @@ public class Notification extends BaseEntity {
      */
     @NotNull(message = "El tipo de notificación es obligatorio")
     @Enumerated(EnumType.STRING)
-    @Column(name = "type", nullable = false, length = 30)
+    @Column(name = "type", nullable = false, length = 50)
     private NotificationType type;
 
     /**
-     * Asunto de la notificación.
+     * Título de la notificación.
      */
-    @NotBlank(message = "El asunto es obligatorio")
-    @Size(min = 1, max = 255, message = "El asunto debe tener entre 1 y 255 caracteres")
-    @Column(name = "subject", nullable = false, length = 255)
-    private String subject;
+    @NotBlank(message = "El título es obligatorio")
+    @Size(min = 1, max = 200, message = "El título debe tener entre 1 y 200 caracteres")
+    @Column(name = "title", nullable = false, length = 200)
+    private String title;
 
     /**
      * Mensaje de la notificación.
      */
     @NotBlank(message = "El mensaje es obligatorio")
-    @Column(name = "message", nullable = false, columnDefinition = "TEXT")
+    @Size(min = 1, max = 1000, message = "El mensaje debe tener entre 1 y 1000 caracteres")
+    @Column(name = "message", nullable = false, length = 1000)
     private String message;
 
     /**
-     * Estado actual de la notificación.
+     * Estado de la notificación.
      */
     @NotNull(message = "El estado es obligatorio")
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
-    private NotificationStatus status = NotificationStatus.PENDING;
+    private NotificationStatus status;
 
     /**
-     * Fecha y hora de envío.
+     * Canal por el cual se envía la notificación.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "channel", nullable = false, length = 20)
+    private NotificationChannel channel;
+
+    /**
+     * Prioridad de la notificación.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "priority", nullable = false, length = 10)
+    private NotificationPriority priority;
+
+    /**
+     * Fecha en que se debe enviar la notificación.
+     */
+    @Column(name = "scheduled_at")
+    private LocalDateTime scheduledAt;
+
+    /**
+     * Fecha en que se envió la notificación.
      */
     @Column(name = "sent_at")
     private LocalDateTime sentAt;
 
     /**
-     * Fecha y hora de lectura.
+     * Fecha en que se leyó la notificación.
      */
     @Column(name = "read_at")
     private LocalDateTime readAt;
 
     /**
-     * Número de reintentos realizados.
+     * Datos adicionales en formato JSON.
      */
-    @Min(value = 0, message = "El número de reintentos no puede ser negativo")
-    @Column(name = "retry_count", nullable = false)
-    private Integer retryCount = 0;
+    @Column(name = "metadata", columnDefinition = "jsonb")
+    private String metadata;
 
     /**
-     * Mensaje de error en caso de fallo.
+     * ID de referencia del objeto relacionado (torneo, ticket, etc).
      */
-    @Column(name = "error_message", columnDefinition = "TEXT")
-    private String errorMessage;
+    @Column(name = "reference_id")
+    private Long referenceId;
+
+    /**
+     * Tipo de referencia del objeto relacionado.
+     */
+    @Column(name = "reference_type", length = 50)
+    private String referenceType;
 
     /**
      * Constructor por defecto para JPA.
@@ -190,34 +146,26 @@ public class Notification extends BaseEntity {
 
     /**
      * Constructor para crear una nueva notificación.
-     * 
-     * @param userId el ID del usuario destinatario
-     * @param type el tipo de notificación
-     * @param subject el asunto
-     * @param message el mensaje
      */
-    public Notification(Long userId, NotificationType type, String subject, String message) {
+    public Notification(Long userId, NotificationType type, String title, String message,
+                       NotificationChannel channel, NotificationPriority priority) {
         super();
         this.userId = userId;
         this.type = type;
-        this.subject = subject;
+        this.title = title;
         this.message = message;
+        this.channel = channel;
+        this.priority = priority;
         this.status = NotificationStatus.PENDING;
-        this.retryCount = 0;
+        this.scheduledAt = LocalDateTime.now();
     }
 
     /**
      * Constructor completo con torneo.
-     * 
-     * @param userId el ID del usuario destinatario
-     * @param tournament el torneo relacionado
-     * @param type el tipo de notificación
-     * @param subject el asunto
-     * @param message el mensaje
      */
-    public Notification(Long userId, Tournament tournament, NotificationType type, 
-                       String subject, String message) {
-        this(userId, type, subject, message);
+    public Notification(Long userId, Tournament tournament, NotificationType type, String title, String message,
+                       NotificationChannel channel, NotificationPriority priority) {
+        this(userId, type, title, message, channel, priority);
         this.tournament = tournament;
     }
 
@@ -227,120 +175,75 @@ public class Notification extends BaseEntity {
 
     /**
      * Marca la notificación como enviada.
-     * 
-     * @throws IllegalStateException si la notificación no puede ser marcada como enviada
      */
     public void markAsSent() {
-        if (!status.canTransitionTo(NotificationStatus.SENT)) {
-            throw new IllegalStateException("No se puede marcar como enviada la notificación en estado: " + status);
+        if (this.status != NotificationStatus.PENDING) {
+            throw new IllegalStateException("Solo se pueden marcar como enviadas las notificaciones pendientes");
         }
-        
         this.status = NotificationStatus.SENT;
         this.sentAt = LocalDateTime.now();
-        this.errorMessage = null; // Limpiar errores previos
-    }
-
-    /**
-     * Marca la notificación como fallida.
-     * 
-     * @param errorMessage el mensaje de error
-     * @throws IllegalStateException si la notificación no puede ser marcada como fallida
-     */
-    public void markAsFailed(String errorMessage) {
-        if (!status.canTransitionTo(NotificationStatus.FAILED)) {
-            throw new IllegalStateException("No se puede marcar como fallida la notificación en estado: " + status);
-        }
-        
-        this.status = NotificationStatus.FAILED;
-        this.errorMessage = errorMessage;
-        this.retryCount++;
     }
 
     /**
      * Marca la notificación como leída.
-     * 
-     * @throws IllegalStateException si la notificación no puede ser marcada como leída
      */
     public void markAsRead() {
-        if (!status.canTransitionTo(NotificationStatus.READ)) {
-            throw new IllegalStateException("No se puede marcar como leída la notificación en estado: " + status);
+        if (this.status != NotificationStatus.SENT) {
+            throw new IllegalStateException("Solo se pueden marcar como leídas las notificaciones enviadas");
         }
-        
         this.status = NotificationStatus.READ;
         this.readAt = LocalDateTime.now();
     }
 
     /**
-     * Reinicia la notificación para un nuevo intento.
-     * 
-     * @throws IllegalStateException si la notificación no puede ser reiniciada
+     * Marca la notificación como fallida.
      */
-    public void resetForRetry() {
-        if (!status.canTransitionTo(NotificationStatus.PENDING)) {
-            throw new IllegalStateException("No se puede reiniciar la notificación en estado: " + status);
+    public void markAsFailed() {
+        if (this.status == NotificationStatus.READ) {
+            throw new IllegalStateException("No se puede marcar como fallida una notificación ya leída");
         }
-        
-        this.status = NotificationStatus.PENDING;
-        this.errorMessage = null;
+        this.status = NotificationStatus.FAILED;
     }
 
     /**
-     * Verifica si la notificación puede ser reenviada.
-     * 
-     * @param maxRetries el número máximo de reintentos permitidos
-     * @return true si puede ser reenviada
+     * Programa la notificación para una fecha específica.
      */
-    public boolean canRetry(int maxRetries) {
-        return status == NotificationStatus.FAILED && retryCount < maxRetries;
-    }
-
-    /**
-     * Verifica si la notificación está pendiente de envío.
-     * 
-     * @return true si está pendiente
-     */
-    public boolean isPending() {
-        return status == NotificationStatus.PENDING;
-    }
-
-    /**
-     * Verifica si la notificación fue enviada exitosamente.
-     * 
-     * @return true si fue enviada
-     */
-    public boolean isSent() {
-        return status == NotificationStatus.SENT;
-    }
-
-    /**
-     * Verifica si la notificación falló en el envío.
-     * 
-     * @return true si falló
-     */
-    public boolean isFailed() {
-        return status == NotificationStatus.FAILED;
-    }
-
-    /**
-     * Verifica si la notificación fue leída.
-     * 
-     * @return true si fue leída
-     */
-    public boolean isRead() {
-        return status == NotificationStatus.READ;
-    }
-
-    /**
-     * Calcula el tiempo transcurrido desde el envío.
-     * 
-     * @return el tiempo en minutos, o null si no ha sido enviada
-     */
-    public Long getMinutesSinceSent() {
-        if (sentAt == null) {
-            return null;
+    public void scheduleFor(LocalDateTime dateTime) {
+        if (dateTime.isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("No se puede programar una notificación en el pasado");
         }
-        
-        return java.time.Duration.between(sentAt, LocalDateTime.now()).toMinutes();
+        this.scheduledAt = dateTime;
+    }
+
+    /**
+     * Establece la referencia a un objeto relacionado.
+     */
+    public void setReference(String referenceType, Long referenceId) {
+        this.referenceType = referenceType;
+        this.referenceId = referenceId;
+    }
+
+    /**
+     * Verifica si la notificación está lista para ser enviada.
+     */
+    public boolean isReadyToSend() {
+        return status == NotificationStatus.PENDING && 
+               scheduledAt != null && 
+               !scheduledAt.isAfter(LocalDateTime.now());
+    }
+
+    /**
+     * Verifica si la notificación es de alta prioridad.
+     */
+    public boolean isHighPriority() {
+        return priority == NotificationPriority.HIGH || priority == NotificationPriority.CRITICAL;
+    }
+
+    /**
+     * Obtiene el tiempo transcurrido desde la creación.
+     */
+    public long getMinutesSinceCreated() {
+        return java.time.Duration.between(getCreatedAt(), LocalDateTime.now()).toMinutes();
     }
 
     // ======================================================================
@@ -371,12 +274,12 @@ public class Notification extends BaseEntity {
         this.type = type;
     }
 
-    public String getSubject() {
-        return subject;
+    public String getTitle() {
+        return title;
     }
 
-    public void setSubject(String subject) {
-        this.subject = subject;
+    public void setTitle(String title) {
+        this.title = title;
     }
 
     public String getMessage() {
@@ -395,6 +298,30 @@ public class Notification extends BaseEntity {
         this.status = status;
     }
 
+    public NotificationChannel getChannel() {
+        return channel;
+    }
+
+    public void setChannel(NotificationChannel channel) {
+        this.channel = channel;
+    }
+
+    public NotificationPriority getPriority() {
+        return priority;
+    }
+
+    public void setPriority(NotificationPriority priority) {
+        this.priority = priority;
+    }
+
+    public LocalDateTime getScheduledAt() {
+        return scheduledAt;
+    }
+
+    public void setScheduledAt(LocalDateTime scheduledAt) {
+        this.scheduledAt = scheduledAt;
+    }
+
     public LocalDateTime getSentAt() {
         return sentAt;
     }
@@ -411,33 +338,42 @@ public class Notification extends BaseEntity {
         this.readAt = readAt;
     }
 
-    public Integer getRetryCount() {
-        return retryCount;
+    public String getMetadata() {
+        return metadata;
     }
 
-    public void setRetryCount(Integer retryCount) {
-        this.retryCount = retryCount;
+    public void setMetadata(String metadata) {
+        this.metadata = metadata;
     }
 
-    public String getErrorMessage() {
-        return errorMessage;
+    public Long getReferenceId() {
+        return referenceId;
     }
 
-    public void setErrorMessage(String errorMessage) {
-        this.errorMessage = errorMessage;
+    public void setReferenceId(Long referenceId) {
+        this.referenceId = referenceId;
     }
+
+    public String getReferenceType() {
+        return referenceType;
+    }
+
+    public void setReferenceType(String referenceType) {
+        this.referenceType = referenceType;
+    }
+
+    
 
     @Override
     public String toString() {
         return "Notification{" +
                 "id=" + getId() +
                 ", userId=" + userId +
-                ", tournamentId=" + (tournament != null ? tournament.getId() : null) +
                 ", type=" + type +
-                ", subject='" + subject + '\'' +
+                ", title='" + title + '\'' +
                 ", status=" + status +
-                ", retryCount=" + retryCount +
-                ", createdAt=" + getCreatedAt() +
+                ", priority=" + priority +
+                ", scheduledAt=" + scheduledAt +
                 '}';
     }
 } 
