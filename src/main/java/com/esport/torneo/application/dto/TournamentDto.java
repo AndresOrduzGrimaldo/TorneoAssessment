@@ -2,50 +2,129 @@ package com.esport.torneo.application.dto;
 
 import com.esport.torneo.domain.tournament.TournamentStatus;
 import com.esport.torneo.domain.tournament.TournamentType;
-import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
- * DTO para transferencia de datos de torneos (respuestas).
+ * DTO para representar un torneo.
  * 
- * @author Andrés Orduz Grimaldo
- * @version 1.0.0
+ * @author Andrés Orduz
+ * @version 1.0
  * @since 2024
  */
-@JsonInclude(JsonInclude.Include.NON_NULL)
+@Schema(description = "Datos de un torneo")
 public class TournamentDto {
 
+    @Schema(description = "ID único del torneo", example = "1")
     private Long id;
+
+    @Schema(description = "Nombre del torneo", example = "Copa Mundial CS2 2024", required = true)
+    @NotBlank(message = "El nombre es obligatorio")
+    @Size(min = 3, max = 200, message = "El nombre debe tener entre 3 y 200 caracteres")
     private String name;
+
+    @Schema(description = "Descripción del torneo", example = "Torneo mundial de Counter-Strike 2")
+    @Size(max = 2000, message = "La descripción no puede exceder 2000 caracteres")
     private String description;
-    private TournamentType tournamentType;
+
+    @Schema(description = "Tipo de torneo", example = "PAID", required = true)
+    @NotNull(message = "El tipo de torneo es obligatorio")
+    private TournamentType type;
+
+    @Schema(description = "Estado del torneo", example = "PUBLISHED")
     private TournamentStatus status;
-    private CategoryDto category;
-    private GameDto game;
-    private Long organizerId;
+
+    @Schema(description = "Fecha de inicio del torneo", example = "2024-03-15T14:00:00", required = true)
+    @NotNull(message = "La fecha de inicio es obligatoria")
+    @Future(message = "La fecha de inicio debe ser futura")
+    private LocalDateTime startDateTime;
+
+    @Schema(description = "Fecha de fin del torneo", example = "2024-03-15T18:00:00", required = true)
+    @NotNull(message = "La fecha de fin es obligatoria")
+    @Future(message = "La fecha de fin debe ser futura")
+    private LocalDateTime endDateTime;
+
+    @Schema(description = "Fecha límite de registro", example = "2024-03-14T23:59:59", required = true)
+    @NotNull(message = "La fecha límite de registro es obligatoria")
+    @Future(message = "La fecha límite debe ser futura")
+    private LocalDateTime registrationDeadline;
+
+    @Schema(description = "Máximo número de participantes", example = "64", required = true)
+    @NotNull(message = "El máximo de participantes es obligatorio")
+    @Positive(message = "El máximo de participantes debe ser positivo")
+    @Max(value = 1000, message = "El máximo de participantes no puede exceder 1000")
     private Integer maxParticipants;
-    private Integer currentParticipants;
-    private BigDecimal entryFee;
-    private BigDecimal prizePool;
-    private BigDecimal commissionRate;
-    private LocalDateTime startDate;
-    private LocalDateTime endDate;
-    private LocalDateTime registrationStart;
-    private LocalDateTime registrationEnd;
-    private String streamUrl;
-    private String streamPlatform;
+
+    @Schema(description = "Precio del ticket (para torneos de pago)", example = "25.00")
+    @DecimalMin(value = "0.0", inclusive = true, message = "El precio no puede ser negativo")
+    @Digits(integer = 8, fraction = 2, message = "El precio debe tener máximo 8 dígitos enteros y 2 decimales")
+    private BigDecimal ticketPrice;
+
+    @Schema(description = "Comisión del organizador (%)", example = "10.0")
+    @DecimalMin(value = "0.0", message = "La comisión no puede ser negativa")
+    @DecimalMax(value = "50.0", message = "La comisión no puede exceder 50%")
+    private BigDecimal commissionPercentage;
+
+    @Schema(description = "Reglas del torneo")
+    @Size(max = 5000, message = "Las reglas no pueden exceder 5000 caracteres")
     private String rules;
-    private String bannerImageUrl;
-    private Boolean active;
+
+    @Schema(description = "Premios del torneo")
+    @Size(max = 2000, message = "Los premios no pueden exceder 2000 caracteres")
+    private String prizes;
+
+    @Schema(description = "URL de transmisión en vivo")
+    @Size(max = 500, message = "La URL de stream no puede exceder 500 caracteres")
+    private String streamUrl;
+
+    @Schema(description = "URL de Discord")
+    @Size(max = 500, message = "La URL de Discord no puede exceder 500 caracteres")
+    private String discordUrl;
+
+    @Schema(description = "ID del juego", example = "1", required = true)
+    @NotNull(message = "El juego es obligatorio")
+    private Long gameId;
+
+    @Schema(description = "Nombre del juego", example = "Counter-Strike 2")
+    private String gameName;
+
+    @Schema(description = "ID de la categoría", example = "1")
+    private Long categoryId;
+
+    @Schema(description = "Nombre de la categoría", example = "FPS")
+    private String categoryName;
+
+    @Schema(description = "ID del organizador", example = "1", required = true)
+    @NotNull(message = "El organizador es obligatorio")
+    private Long organizerId;
+
+    @Schema(description = "Nombre del organizador", example = "Pro Gaming Events")
+    private String organizerName;
+
+    @Schema(description = "Número actual de participantes", example = "32")
+    private Integer currentParticipants;
+
+    @Schema(description = "Lista de participantes")
+    private List<TournamentParticipantDto> participants;
+
+    @Schema(description = "Lista de etapas del torneo")
+    private List<TournamentStageDto> stages;
+
+    @Schema(description = "Indica si el torneo está completo", example = "false")
+    private Boolean isFull;
+
+    @Schema(description = "Indica si las inscripciones están abiertas", example = "true")
+    private Boolean registrationOpen;
+
+    @Schema(description = "Fecha de creación", example = "2024-01-15T10:30:00")
     private LocalDateTime createdAt;
+
+    @Schema(description = "Fecha de última actualización", example = "2024-01-15T10:30:00")
     private LocalDateTime updatedAt;
-    
-    // Campos calculados
-    private Boolean isRegistrationOpen;
-    private Boolean hasAvailableSlots;
-    private BigDecimal totalCommission;
 
     /**
      * Constructor por defecto.
@@ -53,10 +132,45 @@ public class TournamentDto {
     public TournamentDto() {
     }
 
-    // ======================================================================
-    // GETTERS Y SETTERS
-    // ======================================================================
+    /**
+     * Constructor completo.
+     */
+    public TournamentDto(Long id, String name, String description, TournamentType type, TournamentStatus status,
+                        LocalDateTime startDateTime, LocalDateTime endDateTime, LocalDateTime registrationDeadline,
+                        Integer maxParticipants, BigDecimal ticketPrice, BigDecimal commissionPercentage,
+                        String rules, String prizes, String streamUrl, String discordUrl,
+                        Long gameId, String gameName, Long categoryId, String categoryName,
+                        Long organizerId, String organizerName, Integer currentParticipants,
+                        Boolean isFull, Boolean registrationOpen, LocalDateTime createdAt, LocalDateTime updatedAt) {
+        this.id = id;
+        this.name = name;
+        this.description = description;
+        this.type = type;
+        this.status = status;
+        this.startDateTime = startDateTime;
+        this.endDateTime = endDateTime;
+        this.registrationDeadline = registrationDeadline;
+        this.maxParticipants = maxParticipants;
+        this.ticketPrice = ticketPrice;
+        this.commissionPercentage = commissionPercentage;
+        this.rules = rules;
+        this.prizes = prizes;
+        this.streamUrl = streamUrl;
+        this.discordUrl = discordUrl;
+        this.gameId = gameId;
+        this.gameName = gameName;
+        this.categoryId = categoryId;
+        this.categoryName = categoryName;
+        this.organizerId = organizerId;
+        this.organizerName = organizerName;
+        this.currentParticipants = currentParticipants;
+        this.isFull = isFull;
+        this.registrationOpen = registrationOpen;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+    }
 
+    // Getters y Setters
     public Long getId() {
         return id;
     }
@@ -81,12 +195,12 @@ public class TournamentDto {
         this.description = description;
     }
 
-    public TournamentType getTournamentType() {
-        return tournamentType;
+    public TournamentType getType() {
+        return type;
     }
 
-    public void setTournamentType(TournamentType tournamentType) {
-        this.tournamentType = tournamentType;
+    public void setType(TournamentType type) {
+        this.type = type;
     }
 
     public TournamentStatus getStatus() {
@@ -97,28 +211,28 @@ public class TournamentDto {
         this.status = status;
     }
 
-    public CategoryDto getCategory() {
-        return category;
+    public LocalDateTime getStartDateTime() {
+        return startDateTime;
     }
 
-    public void setCategory(CategoryDto category) {
-        this.category = category;
+    public void setStartDateTime(LocalDateTime startDateTime) {
+        this.startDateTime = startDateTime;
     }
 
-    public GameDto getGame() {
-        return game;
+    public LocalDateTime getEndDateTime() {
+        return endDateTime;
     }
 
-    public void setGame(GameDto game) {
-        this.game = game;
+    public void setEndDateTime(LocalDateTime endDateTime) {
+        this.endDateTime = endDateTime;
     }
 
-    public Long getOrganizerId() {
-        return organizerId;
+    public LocalDateTime getRegistrationDeadline() {
+        return registrationDeadline;
     }
 
-    public void setOrganizerId(Long organizerId) {
-        this.organizerId = organizerId;
+    public void setRegistrationDeadline(LocalDateTime registrationDeadline) {
+        this.registrationDeadline = registrationDeadline;
     }
 
     public Integer getMaxParticipants() {
@@ -129,84 +243,20 @@ public class TournamentDto {
         this.maxParticipants = maxParticipants;
     }
 
-    public Integer getCurrentParticipants() {
-        return currentParticipants;
+    public BigDecimal getTicketPrice() {
+        return ticketPrice;
     }
 
-    public void setCurrentParticipants(Integer currentParticipants) {
-        this.currentParticipants = currentParticipants;
+    public void setTicketPrice(BigDecimal ticketPrice) {
+        this.ticketPrice = ticketPrice;
     }
 
-    public BigDecimal getEntryFee() {
-        return entryFee;
+    public BigDecimal getCommissionPercentage() {
+        return commissionPercentage;
     }
 
-    public void setEntryFee(BigDecimal entryFee) {
-        this.entryFee = entryFee;
-    }
-
-    public BigDecimal getPrizePool() {
-        return prizePool;
-    }
-
-    public void setPrizePool(BigDecimal prizePool) {
-        this.prizePool = prizePool;
-    }
-
-    public BigDecimal getCommissionRate() {
-        return commissionRate;
-    }
-
-    public void setCommissionRate(BigDecimal commissionRate) {
-        this.commissionRate = commissionRate;
-    }
-
-    public LocalDateTime getStartDate() {
-        return startDate;
-    }
-
-    public void setStartDate(LocalDateTime startDate) {
-        this.startDate = startDate;
-    }
-
-    public LocalDateTime getEndDate() {
-        return endDate;
-    }
-
-    public void setEndDate(LocalDateTime endDate) {
-        this.endDate = endDate;
-    }
-
-    public LocalDateTime getRegistrationStart() {
-        return registrationStart;
-    }
-
-    public void setRegistrationStart(LocalDateTime registrationStart) {
-        this.registrationStart = registrationStart;
-    }
-
-    public LocalDateTime getRegistrationEnd() {
-        return registrationEnd;
-    }
-
-    public void setRegistrationEnd(LocalDateTime registrationEnd) {
-        this.registrationEnd = registrationEnd;
-    }
-
-    public String getStreamUrl() {
-        return streamUrl;
-    }
-
-    public void setStreamUrl(String streamUrl) {
-        this.streamUrl = streamUrl;
-    }
-
-    public String getStreamPlatform() {
-        return streamPlatform;
-    }
-
-    public void setStreamPlatform(String streamPlatform) {
-        this.streamPlatform = streamPlatform;
+    public void setCommissionPercentage(BigDecimal commissionPercentage) {
+        this.commissionPercentage = commissionPercentage;
     }
 
     public String getRules() {
@@ -217,20 +267,116 @@ public class TournamentDto {
         this.rules = rules;
     }
 
-    public String getBannerImageUrl() {
-        return bannerImageUrl;
+    public String getPrizes() {
+        return prizes;
     }
 
-    public void setBannerImageUrl(String bannerImageUrl) {
-        this.bannerImageUrl = bannerImageUrl;
+    public void setPrizes(String prizes) {
+        this.prizes = prizes;
     }
 
-    public Boolean getActive() {
-        return active;
+    public String getStreamUrl() {
+        return streamUrl;
     }
 
-    public void setActive(Boolean active) {
-        this.active = active;
+    public void setStreamUrl(String streamUrl) {
+        this.streamUrl = streamUrl;
+    }
+
+    public String getDiscordUrl() {
+        return discordUrl;
+    }
+
+    public void setDiscordUrl(String discordUrl) {
+        this.discordUrl = discordUrl;
+    }
+
+    public Long getGameId() {
+        return gameId;
+    }
+
+    public void setGameId(Long gameId) {
+        this.gameId = gameId;
+    }
+
+    public String getGameName() {
+        return gameName;
+    }
+
+    public void setGameName(String gameName) {
+        this.gameName = gameName;
+    }
+
+    public Long getCategoryId() {
+        return categoryId;
+    }
+
+    public void setCategoryId(Long categoryId) {
+        this.categoryId = categoryId;
+    }
+
+    public String getCategoryName() {
+        return categoryName;
+    }
+
+    public void setCategoryName(String categoryName) {
+        this.categoryName = categoryName;
+    }
+
+    public Long getOrganizerId() {
+        return organizerId;
+    }
+
+    public void setOrganizerId(Long organizerId) {
+        this.organizerId = organizerId;
+    }
+
+    public String getOrganizerName() {
+        return organizerName;
+    }
+
+    public void setOrganizerName(String organizerName) {
+        this.organizerName = organizerName;
+    }
+
+    public Integer getCurrentParticipants() {
+        return currentParticipants;
+    }
+
+    public void setCurrentParticipants(Integer currentParticipants) {
+        this.currentParticipants = currentParticipants;
+    }
+
+    public List<TournamentParticipantDto> getParticipants() {
+        return participants;
+    }
+
+    public void setParticipants(List<TournamentParticipantDto> participants) {
+        this.participants = participants;
+    }
+
+    public List<TournamentStageDto> getStages() {
+        return stages;
+    }
+
+    public void setStages(List<TournamentStageDto> stages) {
+        this.stages = stages;
+    }
+
+    public Boolean getIsFull() {
+        return isFull;
+    }
+
+    public void setIsFull(Boolean isFull) {
+        this.isFull = isFull;
+    }
+
+    public Boolean getRegistrationOpen() {
+        return registrationOpen;
+    }
+
+    public void setRegistrationOpen(Boolean registrationOpen) {
+        this.registrationOpen = registrationOpen;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -249,40 +395,20 @@ public class TournamentDto {
         this.updatedAt = updatedAt;
     }
 
-    public Boolean getIsRegistrationOpen() {
-        return isRegistrationOpen;
-    }
-
-    public void setIsRegistrationOpen(Boolean isRegistrationOpen) {
-        this.isRegistrationOpen = isRegistrationOpen;
-    }
-
-    public Boolean getHasAvailableSlots() {
-        return hasAvailableSlots;
-    }
-
-    public void setHasAvailableSlots(Boolean hasAvailableSlots) {
-        this.hasAvailableSlots = hasAvailableSlots;
-    }
-
-    public BigDecimal getTotalCommission() {
-        return totalCommission;
-    }
-
-    public void setTotalCommission(BigDecimal totalCommission) {
-        this.totalCommission = totalCommission;
-    }
-
     @Override
     public String toString() {
         return "TournamentDto{" +
                 "id=" + id +
                 ", name='" + name + '\'' +
-                ", tournamentType=" + tournamentType +
+                ", type=" + type +
                 ", status=" + status +
+                ", startDateTime=" + startDateTime +
+                ", endDateTime=" + endDateTime +
                 ", maxParticipants=" + maxParticipants +
                 ", currentParticipants=" + currentParticipants +
-                ", startDate=" + startDate +
+                ", ticketPrice=" + ticketPrice +
+                ", gameId=" + gameId +
+                ", organizerId=" + organizerId +
                 '}';
     }
 } 

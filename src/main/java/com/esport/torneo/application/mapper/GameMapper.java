@@ -1,78 +1,115 @@
 package com.esport.torneo.application.mapper;
 
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.Named;
-
 import com.esport.torneo.application.dto.GameDto;
 import com.esport.torneo.domain.game.Game;
+import org.springframework.stereotype.Component;
 
 /**
- * Mapper para conversión entre entidades Game y DTOs.
+ * Mapper para convertir entre entidades Game y DTOs.
  * 
- * Utiliza MapStruct para generar automáticamente las implementaciones
- * de mapeo entre objetos de dominio y DTOs.
- * 
- * @author Andrés Orduz Grimaldo
- * @version 1.0.0
+ * @author Andrés Orduz
+ * @version 1.0
  * @since 2024
  */
-@Mapper(componentModel = "spring")
-public interface GameMapper {
+@Component
+public class GameMapper {
 
     /**
      * Convierte una entidad Game a GameDto.
-     * 
-     * @param game la entidad Game
-     * @return el GameDto correspondiente
+     *
+     * @param game la entidad a convertir
+     * @return el DTO correspondiente
      */
-    @Mapping(target = "isTeamGame", source = ".", qualifiedByName = "calculateTeamGame")
-    @Mapping(target = "hasImage", source = ".", qualifiedByName = "calculateHasImage")
-    @Mapping(target = "isFullyConfigured", source = ".", qualifiedByName = "calculateFullyConfigured")
-    GameDto toDto(Game game);
-
-    /**
-     * Calcula si el juego es de equipo.
-     * 
-     * @param game el juego
-     * @return true si requiere más de un jugador
-     */
-    @Named("calculateTeamGame")
-    default Boolean calculateTeamGame(Game game) {
-        if (game == null || game.getPlayerCount() == null) {
-            return false;
+    public GameDto toDto(Game game) {
+        if (game == null) {
+            return null;
         }
-        
-        return game.getPlayerCount() > 1;
+
+        return new GameDto(
+                game.getId(),
+                game.getName(),
+                game.getDescription(),
+                game.getMinPlayers(),
+                game.getMaxPlayers(),
+                game.getGenre(),
+                game.getPlatform(),
+                game.getDeveloper(),
+                game.getImageUrl(),
+                game.getActive(),
+                game.getCategory() != null ? game.getCategory().getId() : null,
+                game.getCategory() != null ? game.getCategory().getName() : null,
+                game.getCreatedAt(),
+                game.getUpdatedAt()
+        );
     }
 
     /**
-     * Calcula si el juego tiene imagen.
-     * 
-     * @param game el juego
-     * @return true si tiene URL de imagen configurada
+     * Convierte un GameDto a entidad Game (sin categoría).
+     *
+     * @param dto el DTO a convertir
+     * @return la entidad correspondiente
      */
-    @Named("calculateHasImage")
-    default Boolean calculateHasImage(Game game) {
-        if (game == null) {
-            return false;
+    public Game toEntity(GameDto dto) {
+        if (dto == null) {
+            return null;
         }
+
+        Game game = new Game(
+                dto.getName(),
+                dto.getDescription(),
+                dto.getMinPlayers(),
+                dto.getMaxPlayers(),
+                null // La categoría se asigna por separado
+        );
         
-        return game.hasImage();
+        game.setId(dto.getId());
+        game.setGenre(dto.getGenre());
+        game.setPlatform(dto.getPlatform());
+        game.setDeveloper(dto.getDeveloper());
+        game.setImageUrl(dto.getImageUrl());
+        game.setActive(dto.getActive());
+        
+        return game;
     }
 
     /**
-     * Calcula si el juego está completamente configurado.
-     * 
-     * @param game el juego
-     * @return true si tiene toda la información básica
+     * Actualiza una entidad Game existente con datos del DTO.
+     *
+     * @param game la entidad a actualizar
+     * @param dto el DTO con los nuevos datos
      */
-    @Named("calculateFullyConfigured")
-    default Boolean calculateFullyConfigured(Game game) {
-        if (game == null) {
-            return false;
+    public void updateEntityFromDto(Game game, GameDto dto) {
+        if (game == null || dto == null) {
+            return;
         }
-        
-        return game.isFullyConfigured();
+
+        if (dto.getName() != null) {
+            game.updateName(dto.getName());
+        }
+        if (dto.getDescription() != null) {
+            game.updateDescription(dto.getDescription());
+        }
+        if (dto.getMinPlayers() != null && dto.getMaxPlayers() != null) {
+            game.updatePlayerLimits(dto.getMinPlayers(), dto.getMaxPlayers());
+        }
+        if (dto.getGenre() != null) {
+            game.setGenre(dto.getGenre());
+        }
+        if (dto.getPlatform() != null) {
+            game.setPlatform(dto.getPlatform());
+        }
+        if (dto.getDeveloper() != null) {
+            game.setDeveloper(dto.getDeveloper());
+        }
+        if (dto.getImageUrl() != null) {
+            game.setImageUrl(dto.getImageUrl());
+        }
+        if (dto.getActive() != null) {
+            if (dto.getActive()) {
+                game.activate();
+            } else {
+                game.deactivate();
+            }
+        }
     }
 } 

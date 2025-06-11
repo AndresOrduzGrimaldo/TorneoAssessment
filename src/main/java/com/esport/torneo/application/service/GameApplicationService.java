@@ -14,7 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.esport.torneo.application.dto.GameDto;
 import com.esport.torneo.application.mapper.GameMapper;
+import com.esport.torneo.domain.category.Category;
 import com.esport.torneo.domain.game.Game;
+import com.esport.torneo.infrastructure.repository.CategoryRepository;
 import com.esport.torneo.infrastructure.repository.GameRepository;
 
 /**
@@ -34,16 +36,21 @@ public class GameApplicationService {
     private static final Logger logger = LoggerFactory.getLogger(GameApplicationService.class);
 
     private final GameRepository gameRepository;
+    private final CategoryRepository categoryRepository;
     private final GameMapper gameMapper;
 
     /**
      * Constructor del servicio.
      * 
      * @param gameRepository repositorio de juegos
+     * @param categoryRepository repositorio de categorías
      * @param gameMapper mapper de juegos
      */
-    public GameApplicationService(GameRepository gameRepository, GameMapper gameMapper) {
+    public GameApplicationService(GameRepository gameRepository, 
+                                CategoryRepository categoryRepository,
+                                GameMapper gameMapper) {
         this.gameRepository = gameRepository;
+        this.categoryRepository = categoryRepository;
         this.gameMapper = gameMapper;
     }
 
@@ -52,29 +59,28 @@ public class GameApplicationService {
      * 
      * @param gameDto datos del juego a crear
      * @return el juego creado
-     * @throws IllegalArgumentException si el código ya existe
+     * @throws IllegalArgumentException si ya existe un juego con ese nombre o la categoría no existe
      */
     @CacheEvict(value = {"games", "activeGames"}, allEntries = true)
     public GameDto createGame(GameDto gameDto) {
-        logger.info("Creando nuevo juego con código: {}", gameDto.getCode());
+        logger.info("Creando nuevo juego: {}", gameDto.getName());
 
-        validateUniqueCode(gameDto.getCode());
+        validateGameName(gameDto.getName(), null);
+        validatePlayerLimits(gameDto.getMinPlayers(), gameDto.getMaxPlayers());
 
-        Game game = new Game(
-            gameDto.getCode(),
-            gameDto.getFullName(),
-            gameDto.getPlayerCount(),
-            gameDto.getDescription(),
-            gameDto.getGenre(),
-            gameDto.getPlatform()
-        );
+        Category category = null;
+        if (gameDto.getCategoryId() != null) {
+            category = categoryRepository.findById(gameDto.getCategoryId())
+                    .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada con ID: " + gameDto.getCategoryId()));
+        }
 
-        if (gameDto.getImageUrl() != null) {
-            game.setImageUrl(gameDto.getImageUrl());
+        Game game = gameMapper.toEntity(gameDto);
+        if (category != null) {
+            game.setCategory(category);
         }
 
         Game savedGame = gameRepository.save(game);
-        logger.info("Juego creado exitosamente: {}", savedGame.getId());
+        logger.info("Juego creado exitosamente con ID: {}", savedGame.getId());
 
         return gameMapper.toDto(savedGame);
     }
@@ -227,17 +233,23 @@ public class GameApplicationService {
                 .filter(g -> g.getActive())
                 .orElseThrow(() -> new IllegalArgumentException("Juego no encontrado: " + id));
 
-        // Validar código único si cambió
-        if (!game.getCode().equals(gameDto.getCode())) {
-            validateUniqueCode(gameDto.getCode());
-            game.setCode(gameDto.getCode());
+        if (gameDto.getName() != null && !gameDto.getName().equals(game.getName())) {
+            validateGameName(gameDto.getName(), id);
+            game.setName(gameDto.getName());
         }
 
-        game.updateBasicInfo(
-            gameDto.getFullName(),
-            gameDto.getPlayerCount(),
-            gameDto.getDescription()
-        );
+        if (gameDto.getMinPlayers() != null && gameDto.getMaxPlayers() != null) {
+            validatePlayerLimits(gameDto.getMinPlayers(), gameDto.getMaxPlayers());
+            game.setMinPlayers(gameDto.getMinPlayers());
+            game.setMaxPlayers(gameDto.getMaxPlayers());
+        }
+
+        if (gameDto.getCategoryId() != null && 
+            (game.getCategory() == null || !gameDto.getCategoryId().equals(game.getCategory().getId()))) {
+            Category category = categoryRepository.findById(gameDto.getCategoryId())
+                    .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada con ID: " + gameDto.getCategoryId()));
+            game.setCategory(category);
+        }
 
         game.updateMetadata(
             gameDto.getGenre(),
@@ -314,14 +326,32 @@ public class GameApplicationService {
     }
 
     /**
-     * Valida que el código del juego sea único.
+     * Valida que el nombre del juego sea único.
      * 
-     * @param code código a validar
-     * @throws IllegalArgumentException si ya existe
+     * @param name el nombre a validar
+     * @param excludeId ID a excluir de la validación (para updates)
+     * @throws IllegalArgumentException si ya existe un juego con ese nombre
      */
-    private void validateUniqueCode(String code) {
-        if (gameRepository.existsByCodeAndActiveTrue(code)) {
-            throw new IllegalArgumentException("Ya existe un juego con el código: " + code);
+    private void validateGameName(String name, Long excludeId) {
+        boolean exists = excludeId != null 
+            ? gameRepository.existsByNameIgnoreCaseAndIdNot(name, excludeId)
+            : gameRepository.existsByNameIgnoreCase(name);
+
+        if (exists) {
+            throw new IllegalArgumentException("Ya existe un juego con el nombre: " + name);
+        }
+    }
+
+    /**
+     * Valida los límites de jugadores.
+     * 
+     * @param minPlayers mínimo de jugadores
+     * @param maxPlayers máximo de jugadores
+     * @throws IllegalArgumentException si los límites son inválidos
+     */
+    private void validatePlayerLimits(Integer minPlayers, Integer maxPlayers) {
+        if (minPlayers != null && maxPlayers != null && minPlayers > maxPlayers) {
+            throw new IllegalArgumentException("El mínimo de jugadores no puede ser mayor al máximo");
         }
     }
 

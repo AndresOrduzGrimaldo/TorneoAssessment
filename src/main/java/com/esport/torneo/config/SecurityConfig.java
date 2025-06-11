@@ -1,7 +1,6 @@
 package com.esport.torneo.config;
 
-import java.util.Arrays;
-
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -9,21 +8,33 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import javax.crypto.spec.SecretKeySpec;
+import java.util.Arrays;
+
 /**
  * Configuración de seguridad para la aplicación.
  * 
- * Define las reglas de seguridad, autenticación y autorización
- * para los endpoints de la API REST.
+ * Implementa:
+ * - Autenticación JWT
+ * - Autorización basada en roles
+ * - CORS configuration
+ * - Endpoints públicos y protegidos
  * 
- * @author Andrés Orduz Grimaldo
- * @version 1.0.0
+ * @author Andrés Orduz
+ * @version 1.0
  * @since 2024
  */
 @Configuration
@@ -31,135 +42,160 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
-    private static final String[] PUBLIC_ENDPOINTS = {
-        "/api/v1/categories/**",
-        "/api/v1/games/**",
-        "/api/v1/tickets/validate/**",
-        "/api/v1/tournaments/*/public",
-        "/api/v1/tournaments/search/**",
-        "/api/v1/tournaments/category/**",
-        "/api/v1/tournaments/game/**",
-        "/actuator/health",
-        "/actuator/info",
-        "/actuator/metrics",
-        "/v3/api-docs/**",
-        "/swagger-ui/**",
-        "/swagger-ui.html"
-    };
+    @Value("${app.jwt.secret}")
+    private String jwtSecret;
 
-    private static final String[] ADMIN_ENDPOINTS = {
-        "/api/v1/tournaments/*/approve",
-        "/api/v1/tournaments/*/reject",
-        "/api/v1/categories/*/reactivate",
-        "/api/v1/games/*/reactivate",
-        "/api/v1/tickets/process-expired",
-        "/api/v1/**/stats",
-        "/actuator/**"
-    };
+    @Value("${app.cors.allowed-origins}")
+    private String[] allowedOrigins;
 
     /**
-     * Configuración principal de seguridad.
-     * 
-     * @param http configurador de seguridad HTTP
-     * @return cadena de filtros de seguridad configurada
-     * @throws Exception si hay error en la configuración
+     * Configuración principal de seguridad HTTP.
      */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         return http
-            // Deshabilitar CSRF para APIs REST
-            .csrf(csrf -> csrf.disable())
-            
-            // Configurar CORS
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            
-            // Configurar manejo de sesiones (stateless para JWT)
-            .sessionManagement(session -> 
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            
-            // Configurar autorización de requests
-            .authorizeHttpRequests(auth -> auth
-                // Endpoints públicos (sin autenticación)
-                .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+            .csrf(csrf -> csrf.disable())
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(authz -> authz
+                // Endpoints públicos - sin autenticación
+                .requestMatchers("/api/v1/auth/**").permitAll()
+                .requestMatchers("/api/v1/health/**").permitAll()
+                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/actuator/info").permitAll()
+                .requestMatchers("/actuator/metrics").permitAll()
                 
-                // Endpoints de administración (solo ADMIN)
-                .requestMatchers(ADMIN_ENDPOINTS).hasRole("ADMIN")
+                // Documentación API - público
+                .requestMatchers("/swagger-ui/**").permitAll()
+                .requestMatchers("/v3/api-docs/**").permitAll()
+                .requestMatchers("/swagger-resources/**").permitAll()
+                .requestMatchers("/webjars/**").permitAll()
                 
-                // Operaciones de lectura (GET) - usuarios autenticados
-                .requestMatchers(HttpMethod.GET, "/api/v1/**").authenticated()
+                // Endpoints de consulta - requieren autenticación básica
+                .requestMatchers(HttpMethod.GET, "/api/v1/categories/active").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/games/active").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/games/popular").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/tournaments/public").authenticated()
                 
-                // Operaciones de tickets - usuarios autenticados
-                .requestMatchers(HttpMethod.POST, "/api/v1/tickets/**").authenticated()
-                .requestMatchers(HttpMethod.PUT, "/api/v1/tickets/**").authenticated()
-                
-                // Operaciones de torneos - ORGANIZER o ADMIN
-                .requestMatchers(HttpMethod.POST, "/api/v1/tournaments/**")
-                    .hasAnyRole("ORGANIZER", "ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/v1/tournaments/**")
-                    .hasAnyRole("ORGANIZER", "ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/v1/tournaments/**")
-                    .hasAnyRole("ORGANIZER", "ADMIN")
-                
-                // Operaciones de categorías y juegos - solo ADMIN
-                .requestMatchers(HttpMethod.POST, "/api/v1/categories/**").hasRole("ADMIN")
+                // Gestión de categorías - solo ADMIN
+                .requestMatchers(HttpMethod.POST, "/api/v1/categories").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/v1/categories/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/categories/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/categories/**").hasRole("ADMIN")
                 
-                .requestMatchers(HttpMethod.POST, "/api/v1/games/**").hasRole("ADMIN")
+                // Gestión de juegos - solo ADMIN
+                .requestMatchers(HttpMethod.POST, "/api/v1/games").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/v1/games/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/games/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/games/**").hasRole("ADMIN")
                 
-                // Cualquier otra request requiere autenticación
+                // Gestión de usuarios - ADMIN y operaciones propias
+                .requestMatchers(HttpMethod.GET, "/api/v1/users").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/users").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/users/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/users/profile").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/api/v1/users/profile").authenticated()
+                
+                // Gestión de torneos - ORGANIZER y ADMIN
+                .requestMatchers(HttpMethod.POST, "/api/v1/tournaments").hasAnyRole("ORGANIZER", "ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/tournaments/**").hasAnyRole("ORGANIZER", "ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/tournaments/**").hasAnyRole("ORGANIZER", "ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/tournaments/**/publish").hasAnyRole("ORGANIZER", "ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/tournaments/**/cancel").hasAnyRole("ORGANIZER", "ADMIN")
+                
+                // Participación en torneos - usuarios autenticados
+                .requestMatchers(HttpMethod.POST, "/api/v1/tournaments/**/participants").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/tournaments/**/participants/**").authenticated()
+                
+                // Gestión de tickets - usuarios autenticados
+                .requestMatchers(HttpMethod.POST, "/api/v1/tickets").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/tickets/my-tickets").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/v1/tickets/**/validate").hasAnyRole("ORGANIZER", "ADMIN")
+                
+                // Estadísticas y reportes - ADMIN
+                .requestMatchers("/api/v1/**/stats").hasRole("ADMIN")
+                .requestMatchers("/api/v1/reports/**").hasRole("ADMIN")
+                
+                // Todos los demás endpoints requieren autenticación
                 .anyRequest().authenticated()
             )
-            
-            // Configurar OAuth2 Resource Server (JWT) - configuración básica
             .oauth2ResourceServer(oauth2 -> oauth2
                 .jwt(jwt -> jwt
-                    .jwtAuthenticationConverter(new CustomJwtAuthenticationConverter())
+                    .decoder(jwtDecoder())
+                    .jwtAuthenticationConverter(jwtAuthenticationConverter())
                 )
             )
-            
+            .exceptionHandling(exceptions -> exceptions
+                .authenticationEntryPoint(new CustomAuthenticationEntryPoint())
+                .accessDeniedHandler(new CustomAccessDeniedHandler())
+            )
             .build();
     }
 
     /**
-     * Configuración de CORS para permitir requests desde frontend.
-     * 
-     * @return fuente de configuración CORS
+     * Decodificador JWT.
+     */
+    @Bean
+    public JwtDecoder jwtDecoder() {
+        var secretKey = new SecretKeySpec(jwtSecret.getBytes(), "HmacSHA256");
+        return NimbusJwtDecoder.withSecretKey(secretKey).build();
+    }
+
+    /**
+     * Convertidor de autenticación JWT para extraer roles.
+     */
+    @Bean
+    public JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtGrantedAuthoritiesConverter authoritiesConverter = new JwtGrantedAuthoritiesConverter();
+        authoritiesConverter.setAuthorityPrefix("ROLE_");
+        authoritiesConverter.setAuthoritiesClaimName("roles");
+
+        JwtAuthenticationConverter authenticationConverter = new JwtAuthenticationConverter();
+        authenticationConverter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
+        authenticationConverter.setPrincipalClaimName("sub");
+
+        return authenticationConverter;
+    }
+
+    /**
+     * Encoder de contraseñas BCrypt.
+     */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder(12);
+    }
+
+    /**
+     * Configuración CORS.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
-        // Permitir orígenes específicos (ajustar en producción)
-        configuration.setAllowedOriginPatterns(Arrays.asList(
-            "http://localhost:*",
-            "https://*.torneoesport.com",
-            "https://*.vercel.app"
-        ));
+        // Orígenes permitidos
+        configuration.setAllowedOriginPatterns(Arrays.asList(allowedOrigins));
         
         // Métodos HTTP permitidos
         configuration.setAllowedMethods(Arrays.asList(
-            "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"
+            "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
         ));
         
         // Headers permitidos
         configuration.setAllowedHeaders(Arrays.asList(
-            "Authorization", "Content-Type", "X-Requested-With", 
-            "Accept", "Origin", "Access-Control-Request-Method",
-            "Access-Control-Request-Headers"
+            "Authorization", "Content-Type", "X-Requested-With", "Accept", 
+            "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"
         ));
         
         // Headers expuestos
         configuration.setExposedHeaders(Arrays.asList(
-            "Access-Control-Allow-Origin", "Access-Control-Allow-Credentials"
+            "Access-Control-Allow-Origin", "Access-Control-Allow-Credentials",
+            "Authorization", "Content-Disposition"
         ));
         
         // Permitir credenciales
         configuration.setAllowCredentials(true);
         
-        // Tiempo de cache para preflight requests
+        // Tiempo de cache para preflight
         configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -169,12 +205,18 @@ public class SecurityConfig {
     }
 
     /**
-     * Codificador de contraseñas BCrypt.
-     * 
-     * @return codificador de contraseñas
+     * Configuración de detalles de usuario personalizada.
      */
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(12);
+    public UserDetailsService userDetailsService() {
+        return new CustomUserDetailsService();
+    }
+
+    /**
+     * Filtro de validación JWT personalizado.
+     */
+    @Bean
+    public JwtAuthenticationFilter jwtAuthenticationFilter() {
+        return new JwtAuthenticationFilter();
     }
 } 

@@ -5,8 +5,9 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,13 +17,10 @@ import com.esport.torneo.domain.category.Category;
 import com.esport.torneo.infrastructure.repository.CategoryRepository;
 
 /**
- * Servicio de aplicación para gestionar categorías.
+ * Servicio de aplicación para la gestión de categorías.
  * 
- * Coordina las operaciones de negocio relacionadas con categorías,
- * actuando como capa de aplicación en la arquitectura DDD.
- * 
- * @author Andrés Orduz Grimaldo
- * @version 1.0.0
+ * @author Andrés Orduz
+ * @version 1.0
  * @since 2024
  */
 @Service
@@ -34,265 +32,214 @@ public class CategoryApplicationService {
     private final CategoryRepository categoryRepository;
     private final CategoryMapper categoryMapper;
 
-    /**
-     * Constructor del servicio.
-     * 
-     * @param categoryRepository repositorio de categorías
-     * @param categoryMapper mapper de categorías
-     */
-    public CategoryApplicationService(CategoryRepository categoryRepository, CategoryMapper categoryMapper) {
+    @Autowired
+    public CategoryApplicationService(CategoryRepository categoryRepository, 
+                                   CategoryMapper categoryMapper) {
         this.categoryRepository = categoryRepository;
         this.categoryMapper = categoryMapper;
     }
 
     /**
      * Crea una nueva categoría.
-     * 
-     * @param categoryDto datos de la categoría a crear
+     *
+     * @param categoryDto datos de la categoría
      * @return la categoría creada
-     * @throws IllegalArgumentException si el código ya existe
+     * @throws IllegalArgumentException si ya existe una categoría con ese nombre
      */
-    @CacheEvict(value = {"categories", "activeCategories"}, allEntries = true)
     public CategoryDto createCategory(CategoryDto categoryDto) {
-        logger.info("Creando nueva categoría con código: {}", categoryDto.getCode());
+        logger.info("Creando nueva categoría: {}", categoryDto.getName());
 
-        validateUniqueCode(categoryDto.getCode());
+        validateCategoryName(categoryDto.getName(), null);
 
-        Category category = new Category(
-            categoryDto.getCode(),
-            categoryDto.getDescription(),
-            categoryDto.getAlias()
-        );
-
+        Category category = categoryMapper.toEntity(categoryDto);
         Category savedCategory = categoryRepository.save(category);
-        logger.info("Categoría creada exitosamente: {}", savedCategory.getId());
 
+        logger.info("Categoría creada exitosamente con ID: {}", savedCategory.getId());
         return categoryMapper.toDto(savedCategory);
     }
 
     /**
      * Obtiene una categoría por ID.
-     * 
-     * @param id ID de la categoría
+     *
+     * @param id el ID de la categoría
      * @return la categoría encontrada
-     * @throws IllegalArgumentException si no se encuentra
+     * @throws IllegalArgumentException si no se encuentra la categoría
      */
-    @Cacheable(value = "categories", key = "#id")
     @Transactional(readOnly = true)
     public CategoryDto getCategoryById(Long id) {
-        logger.debug("Obteniendo categoría por ID: {}", id);
+        logger.debug("Buscando categoría con ID: {}", id);
 
-        Category category = categoryRepository.findByIdAndActiveTrue(id)
-                .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada: " + id));
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada con ID: " + id));
 
         return categoryMapper.toDto(category);
     }
 
     /**
-     * Obtiene una categoría por código.
-     * 
-     * @param code código de la categoría
-     * @return la categoría encontrada
-     * @throws IllegalArgumentException si no se encuentra
+     * Obtiene todas las categorías con paginación.
+     *
+     * @param pageable información de paginación
+     * @return página de categorías
      */
-    @Cacheable(value = "categories", key = "#code")
     @Transactional(readOnly = true)
-    public CategoryDto getCategoryByCode(String code) {
-        logger.debug("Obteniendo categoría por código: {}", code);
+    public Page<CategoryDto> getAllCategories(Pageable pageable) {
+        logger.debug("Obteniendo todas las categorías - página: {}, tamaño: {}", 
+                     pageable.getPageNumber(), pageable.getPageSize());
 
-        Category category = categoryRepository.findByCodeAndActiveTrue(code)
-                .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada: " + code));
-
-        return categoryMapper.toDto(category);
+        return categoryRepository.findAll(pageable)
+                .map(categoryMapper::toDto);
     }
 
     /**
      * Obtiene todas las categorías activas.
-     * 
+     *
      * @return lista de categorías activas
      */
-    @Cacheable(value = "activeCategories")
     @Transactional(readOnly = true)
-    public List<CategoryDto> getAllActiveCategories() {
-        logger.debug("Obteniendo todas las categorías activas");
+    public List<CategoryDto> getActiveCategories() {
+        logger.debug("Obteniendo categorías activas");
 
-        return categoryRepository.findByActiveTrueOrderByDescription()
+        return categoryRepository.findByActiveTrue()
                 .stream()
                 .map(categoryMapper::toDto)
                 .collect(Collectors.toList());
     }
 
     /**
-     * Busca categorías por descripción.
-     * 
-     * @param description descripción a buscar
-     * @return lista de categorías que coinciden
+     * Busca categorías por nombre.
+     *
+     * @param name el nombre a buscar
+     * @param pageable información de paginación
+     * @return página de categorías que coinciden
      */
     @Transactional(readOnly = true)
-    public List<CategoryDto> searchCategoriesByDescription(String description) {
-        logger.debug("Buscando categorías por descripción: {}", description);
+    public Page<CategoryDto> searchCategoriesByName(String name, Pageable pageable) {
+        logger.debug("Buscando categorías por nombre: {}", name);
 
-        return categoryRepository.findByDescriptionContainingIgnoreCase(description)
-                .stream()
-                .map(categoryMapper::toDto)
-                .collect(Collectors.toList());
+        return categoryRepository.findByNameContainingIgnoreCase(name, pageable)
+                .map(categoryMapper::toDto);
     }
 
     /**
-     * Busca categorías por alias.
-     * 
-     * @param alias alias a buscar
-     * @return lista de categorías que coinciden
+     * Busca categorías activas por nombre.
+     *
+     * @param name el nombre a buscar
+     * @param pageable información de paginación
+     * @return página de categorías activas que coinciden
      */
     @Transactional(readOnly = true)
-    public List<CategoryDto> searchCategoriesByAlias(String alias) {
-        logger.debug("Buscando categorías por alias: {}", alias);
+    public Page<CategoryDto> searchActiveCategoriesByName(String name, Pageable pageable) {
+        logger.debug("Buscando categorías activas por nombre: {}", name);
 
-        return categoryRepository.findByAliasContainingIgnoreCase(alias)
-                .stream()
-                .map(categoryMapper::toDto)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Obtiene categorías que tienen alias definido.
-     * 
-     * @return lista de categorías con alias
-     */
-    @Transactional(readOnly = true)
-    public List<CategoryDto> getCategoriesWithAlias() {
-        logger.debug("Obteniendo categorías con alias");
-
-        return categoryRepository.findCategoriesWithAlias()
-                .stream()
-                .map(categoryMapper::toDto)
-                .collect(Collectors.toList());
+        return categoryRepository.findActiveByNameContaining(name, pageable)
+                .map(categoryMapper::toDto);
     }
 
     /**
      * Actualiza una categoría existente.
-     * 
-     * @param id ID de la categoría a actualizar
-     * @param categoryDto datos actualizados
+     *
+     * @param id el ID de la categoría
+     * @param categoryDto los nuevos datos
      * @return la categoría actualizada
-     * @throws IllegalArgumentException si no se encuentra
+     * @throws IllegalArgumentException si no se encuentra la categoría o el nombre ya existe
      */
-    @CacheEvict(value = {"categories", "activeCategories"}, allEntries = true)
     public CategoryDto updateCategory(Long id, CategoryDto categoryDto) {
-        logger.info("Actualizando categoría: {}", id);
+        logger.info("Actualizando categoría con ID: {}", id);
 
-        Category category = categoryRepository.findByIdAndActiveTrue(id)
-                .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada: " + id));
+        Category existingCategory = categoryRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada con ID: " + id));
 
-        // Validar código único si cambió
-        if (!category.getCode().equals(categoryDto.getCode())) {
-            validateUniqueCode(categoryDto.getCode());
-            category.setCode(categoryDto.getCode());
+        if (categoryDto.getName() != null && !categoryDto.getName().equals(existingCategory.getName())) {
+            validateCategoryName(categoryDto.getName(), id);
         }
 
-        category.updateInfo(categoryDto.getDescription(), categoryDto.getAlias());
+        categoryMapper.updateEntityFromDto(existingCategory, categoryDto);
+        Category updatedCategory = categoryRepository.save(existingCategory);
 
-        Category savedCategory = categoryRepository.save(category);
-        logger.info("Categoría actualizada exitosamente: {}", savedCategory.getId());
-
-        return categoryMapper.toDto(savedCategory);
+        logger.info("Categoría actualizada exitosamente con ID: {}", id);
+        return categoryMapper.toDto(updatedCategory);
     }
 
     /**
-     * Elimina (soft delete) una categoría.
-     * 
-     * @param id ID de la categoría a eliminar
-     * @throws IllegalArgumentException si no se encuentra
+     * Activa una categoría.
+     *
+     * @param id el ID de la categoría
+     * @return la categoría activada
      */
-    @CacheEvict(value = {"categories", "activeCategories"}, allEntries = true)
-    public void deleteCategory(Long id) {
-        logger.info("Eliminando categoría: {}", id);
-
-        Category category = categoryRepository.findByIdAndActiveTrue(id)
-                .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada: " + id));
-
-        category.markAsDeleted();
-        categoryRepository.save(category);
-
-        logger.info("Categoría eliminada exitosamente: {}", id);
-    }
-
-    /**
-     * Reactiva una categoría eliminada.
-     * 
-     * @param id ID de la categoría a reactivar
-     * @return la categoría reactivada
-     * @throws IllegalArgumentException si no se encuentra
-     */
-    @CacheEvict(value = {"categories", "activeCategories"}, allEntries = true)
-    public CategoryDto reactivateCategory(Long id) {
-        logger.info("Reactivando categoría: {}", id);
+    public CategoryDto activateCategory(Long id) {
+        logger.info("Activando categoría con ID: {}", id);
 
         Category category = categoryRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada: " + id));
+                .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada con ID: " + id));
 
-        if (category.getActive()) {
-            throw new IllegalStateException("La categoría ya está activa");
-        }
-
-        category.restore();
+        category.activate();
         Category savedCategory = categoryRepository.save(category);
 
-        logger.info("Categoría reactivada exitosamente: {}", savedCategory.getId());
         return categoryMapper.toDto(savedCategory);
     }
 
     /**
-     * Obtiene estadísticas de categorías.
-     * 
-     * @return estadísticas generales
+     * Desactiva una categoría.
+     *
+     * @param id el ID de la categoría
+     * @return la categoría desactivada
      */
-    @Transactional(readOnly = true)
-    public CategoryStatsDto getCategoryStats() {
-        logger.debug("Obteniendo estadísticas de categorías");
+    public CategoryDto deactivateCategory(Long id) {
+        logger.info("Desactivando categoría con ID: {}", id);
 
-        long totalActive = categoryRepository.countByActiveTrue();
-        long totalWithAlias = categoryRepository.findCategoriesWithAlias().size();
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada con ID: " + id));
 
-        return new CategoryStatsDto(totalActive, totalWithAlias);
+        category.deactivate();
+        Category savedCategory = categoryRepository.save(category);
+
+        return categoryMapper.toDto(savedCategory);
     }
 
     /**
-     * Verifica si existe una categoría con el código dado.
-     * 
-     * @param code código a verificar
-     * @return true si existe
+     * Elimina una categoría (soft delete).
+     *
+     * @param id el ID de la categoría
      */
-    @Transactional(readOnly = true)
-    public boolean existsByCode(String code) {
-        return categoryRepository.existsByCodeAndActiveTrue(code);
+    public void deleteCategory(Long id) {
+        logger.info("Eliminando categoría con ID: {}", id);
+
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada con ID: " + id));
+
+        // Verificar si la categoría está siendo usada en torneos
+        // TODO: Implementar validación de uso en torneos
+        
+        category.delete();
+        categoryRepository.save(category);
+
+        logger.info("Categoría eliminada exitosamente con ID: {}", id);
     }
 
     /**
-     * Valida que el código de la categoría sea único.
-     * 
-     * @param code código a validar
-     * @throws IllegalArgumentException si ya existe
+     * Valida que el nombre de la categoría sea único.
+     *
+     * @param name el nombre a validar
+     * @param excludeId ID a excluir de la validación (para updates)
+     * @throws IllegalArgumentException si ya existe una categoría con ese nombre
      */
-    private void validateUniqueCode(String code) {
-        if (categoryRepository.existsByCodeAndActiveTrue(code)) {
-            throw new IllegalArgumentException("Ya existe una categoría con el código: " + code);
+    private void validateCategoryName(String name, Long excludeId) {
+        boolean exists = excludeId != null 
+            ? categoryRepository.existsByNameIgnoreCaseAndIdNot(name, excludeId)
+            : categoryRepository.existsByNameIgnoreCase(name);
+
+        if (exists) {
+            throw new IllegalArgumentException("Ya existe una categoría con el nombre: " + name);
         }
     }
 
     /**
-     * DTO para estadísticas de categorías.
+     * Obtiene el conteo de categorías activas.
+     *
+     * @return número de categorías activas
      */
-    public static class CategoryStatsDto {
-        private final long totalActiveCategories;
-        private final long totalWithAlias;
-
-        public CategoryStatsDto(long totalActiveCategories, long totalWithAlias) {
-            this.totalActiveCategories = totalActiveCategories;
-            this.totalWithAlias = totalWithAlias;
-        }
-
-        public long getTotalActiveCategories() { return totalActiveCategories; }
-        public long getTotalWithAlias() { return totalWithAlias; }
+    @Transactional(readOnly = true)
+    public long getActiveCategoriesCount() {
+        return categoryRepository.countByActiveTrue();
     }
 } 

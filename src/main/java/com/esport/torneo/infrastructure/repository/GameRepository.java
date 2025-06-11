@@ -165,123 +165,162 @@ public interface GameRepository extends JpaRepository<Game, Long> {
     List<Game> findSinglePlayerGames();
 
     /**
-     * Find game by name (case insensitive).
-     * 
-     * @param name the game name
-     * @return Optional containing the game if found
+     * Busca un juego por nombre (ignorando mayúsculas/minúsculas).
+     *
+     * @param name el nombre a buscar
+     * @return el juego encontrado o empty
      */
-    @Query("SELECT g FROM Game g WHERE UPPER(g.name) = UPPER(:name) AND g.deletedAt IS NULL")
-    Optional<Game> findByNameIgnoreCase(@Param("name") String name);
+    Optional<Game> findByNameIgnoreCase(String name);
 
     /**
-     * Find all active games (not soft deleted).
-     * 
-     * @return List of active games
+     * Busca juegos activos.
+     *
+     * @return lista de juegos activos
      */
-    @Query("SELECT g FROM Game g WHERE g.deletedAt IS NULL ORDER BY g.name")
-    List<Game> findAllActive();
+    List<Game> findByActiveTrue();
 
     /**
-     * Find active games with pagination.
-     * 
-     * @param pageable pagination information
-     * @return Page of active games
+     * Busca juegos activos con paginación.
+     *
+     * @param pageable información de paginación
+     * @return página de juegos activos
+     */
+    Page<Game> findByActiveTrue(Pageable pageable);
+
+    /**
+     * Busca juegos por categoría.
+     *
+     * @param categoryId ID de la categoría
+     * @param pageable información de paginación
+     * @return página de juegos de la categoría
+     */
+    @Query("SELECT g FROM Game g WHERE g.category.id = :categoryId")
+    Page<Game> findByCategoryId(@Param("categoryId") Long categoryId, Pageable pageable);
+
+    /**
+     * Busca juegos activos por categoría.
+     *
+     * @param categoryId ID de la categoría
+     * @param pageable información de paginación
+     * @return página de juegos activos de la categoría
+     */
+    @Query("SELECT g FROM Game g WHERE g.category.id = :categoryId AND g.active = true")
+    Page<Game> findActiveByCategoryId(@Param("categoryId") Long categoryId, Pageable pageable);
+
+    /**
+     * Busca juegos por nombre que contenga el texto (ignorando mayúsculas).
+     *
+     * @param name el texto a buscar en el nombre
+     * @param pageable información de paginación
+     * @return página de juegos que coinciden
+     */
+    Page<Game> findByNameContainingIgnoreCase(String name, Pageable pageable);
+
+    /**
+     * Busca juegos activos por nombre que contenga el texto.
+     *
+     * @param name el texto a buscar
+     * @param pageable información de paginación
+     * @return página de juegos activos que coinciden
+     */
+    @Query("SELECT g FROM Game g WHERE g.active = true AND LOWER(g.name) LIKE LOWER(CONCAT('%', :name, '%'))")
+    Page<Game> findActiveByNameContaining(@Param("name") String name, Pageable pageable);
+
+    /**
+     * Busca juegos por género.
+     *
+     * @param genre el género a buscar
+     * @param pageable información de paginación
+     * @return página de juegos del género
+     */
+    Page<Game> findByGenreIgnoreCase(String genre, Pageable pageable);
+
+    /**
+     * Busca juegos por plataforma.
+     *
+     * @param platform la plataforma a buscar
+     * @param pageable información de paginación
+     * @return página de juegos de la plataforma
+     */
+    Page<Game> findByPlatformContainingIgnoreCase(String platform, Pageable pageable);
+
+    /**
+     * Busca juegos por rango de jugadores.
+     *
+     * @param players número de jugadores
+     * @param pageable información de paginación
+     * @return página de juegos que soportan ese número de jugadores
+     */
+    @Query("SELECT g FROM Game g WHERE g.minPlayers <= :players AND g.maxPlayers >= :players")
+    Page<Game> findByPlayerCount(@Param("players") Integer players, Pageable pageable);
+
+    /**
+     * Busca juegos activos por rango de jugadores.
+     *
+     * @param players número de jugadores
+     * @param pageable información de paginación
+     * @return página de juegos activos que soportan ese número de jugadores
+     */
+    @Query("SELECT g FROM Game g WHERE g.active = true AND g.minPlayers <= :players AND g.maxPlayers >= :players")
+    Page<Game> findActiveByPlayerCount(@Param("players") Integer players, Pageable pageable);
+
+    /**
+     * Verifica si existe un juego con el nombre dado (ignorando mayúsculas).
+     *
+     * @param name el nombre a verificar
+     * @return true si existe, false en caso contrario
+     */
+    boolean existsByNameIgnoreCase(String name);
+
+    /**
+     * Verifica si existe otro juego con el mismo nombre (para updates).
+     *
+     * @param name el nombre a verificar
+     * @param id el ID del juego a excluir
+     * @return true si existe otro juego con ese nombre
+     */
+    boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
+
+    /**
+     * Cuenta los juegos activos.
+     *
+     * @return número de juegos activos
+     */
+    long countByActiveTrue();
+
+    /**
+     * Cuenta los juegos por categoría.
+     *
+     * @param categoryId ID de la categoría
+     * @return número de juegos en la categoría
+     */
+    @Query("SELECT COUNT(g) FROM Game g WHERE g.category.id = :categoryId")
+    long countByCategoryId(@Param("categoryId") Long categoryId);
+
+    /**
+     * Busca juegos sin borrado lógico.
+     *
+     * @return lista de juegos no eliminados
      */
     @Query("SELECT g FROM Game g WHERE g.deletedAt IS NULL")
-    Page<Game> findAllActive(Pageable pageable);
+    List<Game> findAllNotDeleted();
 
     /**
-     * Search games by name containing text (case insensitive).
-     * 
-     * @param name text to search in name
-     * @param pageable pagination information
-     * @return Page of matching games
+     * Busca juegos activos sin borrado lógico.
+     *
+     * @return lista de juegos activos no eliminados
      */
-    @Query("SELECT g FROM Game g WHERE UPPER(g.name) LIKE UPPER(CONCAT('%', :name, '%')) AND g.deletedAt IS NULL")
-    Page<Game> findByNameContainingIgnoreCase(@Param("name") String name, Pageable pageable);
+    @Query("SELECT g FROM Game g WHERE g.active = true AND g.deletedAt IS NULL")
+    List<Game> findActiveNotDeleted();
 
     /**
-     * Find games by genre.
-     * 
-     * @param genre the game genre
-     * @param pageable pagination information
-     * @return Page of games with specified genre
+     * Busca juegos populares (por número de torneos).
+     *
+     * @param pageable información de paginación
+     * @return página de juegos ordenados por popularidad
      */
-    @Query("SELECT g FROM Game g WHERE g.genre = :genre AND g.deletedAt IS NULL")
-    Page<Game> findByGenre(@Param("genre") GameGenre genre, Pageable pageable);
-
-    /**
-     * Find games by platform.
-     * 
-     * @param platform the game platform
-     * @param pageable pagination information
-     * @return Page of games with specified platform
-     */
-    @Query("SELECT g FROM Game g WHERE g.platform = :platform AND g.deletedAt IS NULL")
-    Page<Game> findByPlatform(@Param("platform") GamePlatform platform, Pageable pageable);
-
-    /**
-     * Find games by player count range.
-     * 
-     * @param minPlayers minimum number of players
-     * @param maxPlayers maximum number of players
-     * @param pageable pagination information
-     * @return Page of games within player count range
-     */
-    @Query("SELECT g FROM Game g WHERE g.minPlayers >= :minPlayers AND g.maxPlayers <= :maxPlayers AND g.deletedAt IS NULL")
-    Page<Game> findByPlayerCountRange(@Param("minPlayers") Integer minPlayers, @Param("maxPlayers") Integer maxPlayers, Pageable pageable);
-
-    /**
-     * Check if game name exists (excluding specific ID).
-     * 
-     * @param name the game name
-     * @param excludeId ID to exclude from search
-     * @return true if name exists
-     */
-    @Query("SELECT COUNT(g) > 0 FROM Game g WHERE UPPER(g.name) = UPPER(:name) AND g.id != :excludeId AND g.deletedAt IS NULL")
-    boolean existsByNameIgnoreCaseAndIdNot(@Param("name") String name, @Param("excludeId") Long excludeId);
-
-    /**
-     * Check if game name exists.
-     * 
-     * @param name the game name
-     * @return true if name exists
-     */
-    @Query("SELECT COUNT(g) > 0 FROM Game g WHERE UPPER(g.name) = UPPER(:name) AND g.deletedAt IS NULL")
-    boolean existsByNameIgnoreCase(@Param("name") String name);
-
-    /**
-     * Count active games.
-     * 
-     * @return number of active games
-     */
-    @Query("SELECT COUNT(g) FROM Game g WHERE g.deletedAt IS NULL")
-    long countActive();
-
-    /**
-     * Find games by genre list.
-     * 
-     * @param genres list of game genres
-     * @return List of games with specified genres
-     */
-    @Query("SELECT g FROM Game g WHERE g.genre IN :genres AND g.deletedAt IS NULL ORDER BY g.name")
-    List<Game> findByGenreIn(@Param("genres") List<GameGenre> genres);
-
-    /**
-     * Find games by platform list.
-     * 
-     * @param platforms list of game platforms
-     * @return List of games with specified platforms
-     */
-    @Query("SELECT g FROM Game g WHERE g.platform IN :platforms AND g.deletedAt IS NULL ORDER BY g.name")
-    List<Game> findByPlatformIn(@Param("platforms") List<GamePlatform> platforms);
-
-    /**
-     * Find games suitable for specific player count.
-     * 
-     * @param playerCount the number of players
-     * @return List of games that support the player count
-     */
-    @Query("SELECT g FROM Game g WHERE g.minPlayers <= :playerCount AND g.maxPlayers >= :playerCount AND g.deletedAt IS NULL ORDER BY g.name")
-    List<Game> findBySupportedPlayerCount(@Param("playerCount") Integer playerCount);
+    @Query("SELECT g FROM Game g LEFT JOIN Tournament t ON t.game = g " +
+           "WHERE g.active = true AND g.deletedAt IS NULL " +
+           "GROUP BY g ORDER BY COUNT(t) DESC")
+    Page<Game> findPopularGames(Pageable pageable);
 } 

@@ -1,41 +1,41 @@
 package com.esport.torneo.application.dto;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
+import java.time.LocalDateTime;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-import java.time.LocalDateTime;
-
 /**
- * DTO para transferencia de datos de categorías.
+ * DTO para representar una categoría de torneo.
  * 
- * Utilizado en las operaciones de API REST para
- * enviar y recibir información de categorías.
- * 
- * @author Andrés Orduz Grimaldo
- * @version 1.0.0
+ * @author Andrés Orduz
+ * @version 1.0
  * @since 2024
  */
-@JsonInclude(JsonInclude.Include.NON_NULL)
+@Schema(description = "Datos de una categoría de torneo")
 public class CategoryDto {
 
+    @Schema(description = "ID único de la categoría", example = "1")
     private Long id;
 
-    @NotBlank(message = "El código de la categoría es obligatorio")
-    @Size(min = 2, max = 20, message = "El código debe tener entre 2 y 20 caracteres")
-    private String code;
+    @Schema(description = "Nombre de la categoría", example = "FPS", required = true)
+    @NotBlank(message = "El nombre es obligatorio")
+    @Size(min = 2, max = 100, message = "El nombre debe tener entre 2 y 100 caracteres")
+    private String name;
 
-    @NotBlank(message = "La descripción es obligatoria")
-    @Size(min = 3, max = 100, message = "La descripción debe tener entre 3 y 100 caracteres")
+    @Schema(description = "Descripción de la categoría", example = "Juegos de disparos en primera persona")
+    @Size(max = 500, message = "La descripción no puede exceder 500 caracteres")
     private String description;
 
-    @Size(max = 50, message = "El alias no puede exceder 50 caracteres")
-    private String alias;
-
+    @Schema(description = "Indica si la categoría está activa", example = "true")
     private Boolean active;
+
+    @Schema(description = "Fecha de creación", example = "2024-01-15T10:30:00")
     private LocalDateTime createdAt;
+
+    @Schema(description = "Fecha de última actualización", example = "2024-01-15T10:30:00")
     private LocalDateTime updatedAt;
-    private String displayName;
 
     /**
      * Constructor por defecto.
@@ -44,44 +44,24 @@ public class CategoryDto {
     }
 
     /**
-     * Constructor para crear DTO sin ID.
-     * 
-     * @param code código de la categoría
-     * @param description descripción de la categoría
-     * @param alias alias de la categoría
-     */
-    public CategoryDto(String code, String description, String alias) {
-        this.code = code;
-        this.description = description;
-        this.alias = alias;
-    }
-
-    /**
      * Constructor completo.
-     * 
+     *
      * @param id ID de la categoría
-     * @param code código de la categoría
-     * @param description descripción de la categoría
-     * @param alias alias de la categoría
-     * @param active estado activo
-     * @param createdAt fecha de creación
-     * @param updatedAt fecha de actualización
+     * @param name Nombre de la categoría
+     * @param description Descripción de la categoría
+     * @param active Estado activo/inactivo
+     * @param createdAt Fecha de creación
+     * @param updatedAt Fecha de actualización
      */
-    public CategoryDto(Long id, String code, String description, String alias, 
-                      Boolean active, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public CategoryDto(Long id, String name, String description, Boolean active, 
+                      LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
-        this.code = code;
+        this.name = name;
         this.description = description;
-        this.alias = alias;
         this.active = active;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
-        this.displayName = (alias != null && !alias.trim().isEmpty()) ? alias : description;
     }
-
-    // ======================================================================
-    // GETTERS Y SETTERS
-    // ======================================================================
 
     public Long getId() {
         return id;
@@ -91,12 +71,12 @@ public class CategoryDto {
         this.id = id;
     }
 
-    public String getCode() {
-        return code;
+    public String getName() {
+        return name;
     }
 
-    public void setCode(String code) {
-        this.code = code;
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getDescription() {
@@ -105,14 +85,6 @@ public class CategoryDto {
 
     public void setDescription(String description) {
         this.description = description;
-    }
-
-    public String getAlias() {
-        return alias;
-    }
-
-    public void setAlias(String alias) {
-        this.alias = alias;
     }
 
     public Boolean getActive() {
@@ -139,22 +111,15 @@ public class CategoryDto {
         this.updatedAt = updatedAt;
     }
 
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    public void setDisplayName(String displayName) {
-        this.displayName = displayName;
-    }
-
     @Override
     public String toString() {
         return "CategoryDto{" +
                 "id=" + id +
-                ", code='" + code + '\'' +
+                ", name='" + name + '\'' +
                 ", description='" + description + '\'' +
-                ", alias='" + alias + '\'' +
                 ", active=" + active +
+                ", createdAt=" + createdAt +
+                ", updatedAt=" + updatedAt +
                 '}';
     }
 } 

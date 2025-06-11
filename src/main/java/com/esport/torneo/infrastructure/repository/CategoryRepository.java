@@ -84,4 +84,86 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
      */
     @Query("SELECT COUNT(c) FROM Category c WHERE c.deletedAt IS NULL")
     long countActive();
+
+    /**
+     * Busca una categoría por nombre (ignorando mayúsculas/minúsculas).
+     *
+     * @param name el nombre a buscar
+     * @return la categoría encontrada o empty
+     */
+    Optional<Category> findByNameIgnoreCase(String name);
+
+    /**
+     * Busca categorías activas.
+     *
+     * @return lista de categorías activas
+     */
+    List<Category> findByActiveTrue();
+
+    /**
+     * Busca categorías activas con paginación.
+     *
+     * @param pageable información de paginación
+     * @return página de categorías activas
+     */
+    Page<Category> findByActiveTrue(Pageable pageable);
+
+    /**
+     * Busca categorías por nombre que contenga el texto (ignorando mayúsculas).
+     *
+     * @param name el texto a buscar en el nombre
+     * @param pageable información de paginación
+     * @return página de categorías que coinciden
+     */
+    Page<Category> findByNameContainingIgnoreCase(String name, Pageable pageable);
+
+    /**
+     * Busca categorías activas por nombre que contenga el texto.
+     *
+     * @param name el texto a buscar
+     * @param pageable información de paginación
+     * @return página de categorías activas que coinciden
+     */
+    @Query("SELECT c FROM Category c WHERE c.active = true AND LOWER(c.name) LIKE LOWER(CONCAT('%', :name, '%'))")
+    Page<Category> findActiveByNameContaining(@Param("name") String name, Pageable pageable);
+
+    /**
+     * Verifica si existe una categoría con el nombre dado (ignorando mayúsculas).
+     *
+     * @param name el nombre a verificar
+     * @return true si existe, false en caso contrario
+     */
+    boolean existsByNameIgnoreCase(String name);
+
+    /**
+     * Verifica si existe otra categoría con el mismo nombre (para updates).
+     *
+     * @param name el nombre a verificar
+     * @param id el ID de la categoría a excluir
+     * @return true si existe otra categoría con ese nombre
+     */
+    boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
+
+    /**
+     * Cuenta las categorías activas.
+     *
+     * @return número de categorías activas
+     */
+    long countByActiveTrue();
+
+    /**
+     * Busca categorías sin borrado lógico.
+     *
+     * @return lista de categorías no eliminadas
+     */
+    @Query("SELECT c FROM Category c WHERE c.deletedAt IS NULL")
+    List<Category> findAllNotDeleted();
+
+    /**
+     * Busca categorías activas sin borrado lógico.
+     *
+     * @return lista de categorías activas no eliminadas
+     */
+    @Query("SELECT c FROM Category c WHERE c.active = true AND c.deletedAt IS NULL")
+    List<Category> findActiveNotDeleted();
 } 

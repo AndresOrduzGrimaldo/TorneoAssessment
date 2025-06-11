@@ -1,55 +1,75 @@
 package com.esport.torneo.application.dto;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import jakarta.validation.constraints.*;
-
 import java.time.LocalDateTime;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+
 /**
- * DTO para transferencia de datos de juegos.
+ * DTO para representar un juego/videojuego.
  * 
- * Utilizado en las operaciones de API REST para
- * enviar y recibir información de videojuegos.
- * 
- * @author Andrés Orduz Grimaldo
- * @version 1.0.0
+ * @author Andrés Orduz
+ * @version 1.0
  * @since 2024
  */
-@JsonInclude(JsonInclude.Include.NON_NULL)
+@Schema(description = "Datos de un juego/videojuego")
 public class GameDto {
 
+    @Schema(description = "ID único del juego", example = "1")
     private Long id;
 
-    @NotBlank(message = "El código del juego es obligatorio")
-    @Size(min = 2, max = 30, message = "El código debe tener entre 2 y 30 caracteres")
-    private String code;
+    @Schema(description = "Nombre del juego", example = "Counter-Strike 2", required = true)
+    @NotBlank(message = "El nombre es obligatorio")
+    @Size(min = 2, max = 100, message = "El nombre debe tener entre 2 y 100 caracteres")
+    private String name;
 
-    @NotBlank(message = "El nombre completo es obligatorio")
-    @Size(min = 3, max = 100, message = "El nombre debe tener entre 3 y 100 caracteres")
-    private String fullName;
-
-    @NotNull(message = "El número de jugadores es obligatorio")
-    @Positive(message = "El número de jugadores debe ser positivo")
-    private Integer playerCount;
-
-    @Size(max = 500, message = "La descripción no puede exceder 500 caracteres")
+    @Schema(description = "Descripción del juego", example = "Juego de disparos táctico en primera persona")
+    @Size(max = 1000, message = "La descripción no puede exceder 1000 caracteres")
     private String description;
 
-    @Size(max = 255, message = "La URL de imagen no puede exceder 255 caracteres")
-    private String imageUrl;
+    @Schema(description = "Mínimo número de jugadores", example = "2", required = true)
+    @NotNull(message = "El mínimo de jugadores es obligatorio")
+    @Positive(message = "El mínimo de jugadores debe ser positivo")
+    private Integer minPlayers;
 
+    @Schema(description = "Máximo número de jugadores", example = "10", required = true)
+    @NotNull(message = "El máximo de jugadores es obligatorio")
+    @Positive(message = "El máximo de jugadores debe ser positivo")
+    private Integer maxPlayers;
+
+    @Schema(description = "Género del juego", example = "FPS")
     @Size(max = 50, message = "El género no puede exceder 50 caracteres")
     private String genre;
 
-    @Size(max = 30, message = "La plataforma no puede exceder 30 caracteres")
+    @Schema(description = "Plataforma del juego", example = "PC, PlayStation, Xbox")
+    @Size(max = 100, message = "La plataforma no puede exceder 100 caracteres")
     private String platform;
 
+    @Schema(description = "Desarrollador del juego", example = "Valve Corporation")
+    @Size(max = 100, message = "El desarrollador no puede exceder 100 caracteres")
+    private String developer;
+
+    @Schema(description = "URL de la imagen del juego")
+    @Size(max = 500, message = "La URL de imagen no puede exceder 500 caracteres")
+    private String imageUrl;
+
+    @Schema(description = "Indica si el juego está activo", example = "true")
     private Boolean active;
+
+    @Schema(description = "ID de la categoría asociada", example = "1")
+    private Long categoryId;
+
+    @Schema(description = "Nombre de la categoría asociada", example = "FPS")
+    private String categoryName;
+
+    @Schema(description = "Fecha de creación", example = "2024-01-15T10:30:00")
     private LocalDateTime createdAt;
+
+    @Schema(description = "Fecha de última actualización", example = "2024-01-15T10:30:00")
     private LocalDateTime updatedAt;
-    private Boolean isTeamGame;
-    private Boolean hasImage;
-    private Boolean isFullyConfigured;
 
     /**
      * Constructor por defecto.
@@ -58,71 +78,28 @@ public class GameDto {
     }
 
     /**
-     * Constructor para crear DTO básico.
-     * 
-     * @param code código del juego
-     * @param fullName nombre completo
-     * @param playerCount número de jugadores
-     */
-    public GameDto(String code, String fullName, Integer playerCount) {
-        this.code = code;
-        this.fullName = fullName;
-        this.playerCount = playerCount;
-    }
-
-    /**
      * Constructor completo.
-     * 
-     * @param id ID del juego
-     * @param code código del juego
-     * @param fullName nombre completo
-     * @param playerCount número de jugadores
-     * @param description descripción
-     * @param imageUrl URL de imagen
-     * @param genre género del juego
-     * @param platform plataforma
-     * @param active estado activo
-     * @param createdAt fecha de creación
-     * @param updatedAt fecha de actualización
      */
-    public GameDto(Long id, String code, String fullName, Integer playerCount, 
-                   String description, String imageUrl, String genre, String platform,
-                   Boolean active, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public GameDto(Long id, String name, String description, Integer minPlayers, Integer maxPlayers,
+                   String genre, String platform, String developer, String imageUrl, Boolean active,
+                   Long categoryId, String categoryName, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
-        this.code = code;
-        this.fullName = fullName;
-        this.playerCount = playerCount;
+        this.name = name;
         this.description = description;
-        this.imageUrl = imageUrl;
+        this.minPlayers = minPlayers;
+        this.maxPlayers = maxPlayers;
         this.genre = genre;
         this.platform = platform;
+        this.developer = developer;
+        this.imageUrl = imageUrl;
         this.active = active;
+        this.categoryId = categoryId;
+        this.categoryName = categoryName;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
-        
-        // Calcular campos derivados
-        this.isTeamGame = playerCount != null && playerCount > 1;
-        this.hasImage = imageUrl != null && !imageUrl.trim().isEmpty();
-        this.isFullyConfigured = isGameFullyConfigured();
     }
 
-    /**
-     * Verifica si el juego está completamente configurado.
-     * 
-     * @return true si tiene toda la información básica
-     */
-    private boolean isGameFullyConfigured() {
-        return code != null && !code.trim().isEmpty() &&
-               fullName != null && !fullName.trim().isEmpty() &&
-               playerCount != null && playerCount > 0 &&
-               genre != null && !genre.trim().isEmpty() &&
-               platform != null && !platform.trim().isEmpty();
-    }
-
-    // ======================================================================
-    // GETTERS Y SETTERS
-    // ======================================================================
-
+    // Getters y Setters
     public Long getId() {
         return id;
     }
@@ -131,29 +108,12 @@ public class GameDto {
         this.id = id;
     }
 
-    public String getCode() {
-        return code;
+    public String getName() {
+        return name;
     }
 
-    public void setCode(String code) {
-        this.code = code;
-    }
-
-    public String getFullName() {
-        return fullName;
-    }
-
-    public void setFullName(String fullName) {
-        this.fullName = fullName;
-    }
-
-    public Integer getPlayerCount() {
-        return playerCount;
-    }
-
-    public void setPlayerCount(Integer playerCount) {
-        this.playerCount = playerCount;
-        this.isTeamGame = playerCount != null && playerCount > 1;
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getDescription() {
@@ -164,13 +124,20 @@ public class GameDto {
         this.description = description;
     }
 
-    public String getImageUrl() {
-        return imageUrl;
+    public Integer getMinPlayers() {
+        return minPlayers;
     }
 
-    public void setImageUrl(String imageUrl) {
-        this.imageUrl = imageUrl;
-        this.hasImage = imageUrl != null && !imageUrl.trim().isEmpty();
+    public void setMinPlayers(Integer minPlayers) {
+        this.minPlayers = minPlayers;
+    }
+
+    public Integer getMaxPlayers() {
+        return maxPlayers;
+    }
+
+    public void setMaxPlayers(Integer maxPlayers) {
+        this.maxPlayers = maxPlayers;
     }
 
     public String getGenre() {
@@ -189,12 +156,44 @@ public class GameDto {
         this.platform = platform;
     }
 
+    public String getDeveloper() {
+        return developer;
+    }
+
+    public void setDeveloper(String developer) {
+        this.developer = developer;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
+    }
+
     public Boolean getActive() {
         return active;
     }
 
     public void setActive(Boolean active) {
         this.active = active;
+    }
+
+    public Long getCategoryId() {
+        return categoryId;
+    }
+
+    public void setCategoryId(Long categoryId) {
+        this.categoryId = categoryId;
+    }
+
+    public String getCategoryName() {
+        return categoryName;
+    }
+
+    public void setCategoryName(String categoryName) {
+        this.categoryName = categoryName;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -213,40 +212,23 @@ public class GameDto {
         this.updatedAt = updatedAt;
     }
 
-    public Boolean getIsTeamGame() {
-        return isTeamGame;
-    }
-
-    public void setIsTeamGame(Boolean isTeamGame) {
-        this.isTeamGame = isTeamGame;
-    }
-
-    public Boolean getHasImage() {
-        return hasImage;
-    }
-
-    public void setHasImage(Boolean hasImage) {
-        this.hasImage = hasImage;
-    }
-
-    public Boolean getIsFullyConfigured() {
-        return isFullyConfigured;
-    }
-
-    public void setIsFullyConfigured(Boolean isFullyConfigured) {
-        this.isFullyConfigured = isFullyConfigured;
-    }
-
     @Override
     public String toString() {
         return "GameDto{" +
                 "id=" + id +
-                ", code='" + code + '\'' +
-                ", fullName='" + fullName + '\'' +
-                ", playerCount=" + playerCount +
+                ", name='" + name + '\'' +
+                ", description='" + description + '\'' +
+                ", minPlayers=" + minPlayers +
+                ", maxPlayers=" + maxPlayers +
                 ", genre='" + genre + '\'' +
                 ", platform='" + platform + '\'' +
+                ", developer='" + developer + '\'' +
+                ", imageUrl='" + imageUrl + '\'' +
                 ", active=" + active +
+                ", categoryId=" + categoryId +
+                ", categoryName='" + categoryName + '\'' +
+                ", createdAt=" + createdAt +
+                ", updatedAt=" + updatedAt +
                 '}';
     }
 } 
