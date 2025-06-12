@@ -61,3 +61,81 @@ management:
   endpoint:
     health:
       show-details: always 
+
+# Configuración para ambiente de pruebas
+spring:
+  # Base de datos en memoria para tests
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+    
+  # JPA Configuration para tests
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.H2Dialect
+        
+  # H2 Console para debugging
+  h2:
+    console:
+      enabled: true
+      
+  # Flyway deshabilitado para tests (usamos create-drop)
+  flyway:
+    enabled: false
+    
+  # Cache deshabilitado para tests
+  cache:
+    type: none
+    
+  # Logging para tests
+  logging:
+    level:
+      com.esport.torneo: DEBUG
+      org.springframework.security: DEBUG
+      org.hibernate.SQL: DEBUG
+      org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+      
+# Configuración JWT para tests
+app:
+  jwt:
+    secret: test-secret-key-for-jwt-tokens-in-testing-environment-should-be-secure
+    expiration: 86400000  # 24 hours
+    refresh-expiration: 604800000  # 7 days
+    
+  # CORS para tests
+  cors:
+    allowed-origins:
+      - http://localhost:3000
+      - http://localhost:8080
+      
+# Security deshabilitada para algunos tests
+security:
+  basic:
+    enabled: false
+    
+# Actuator para tests
+management:
+  endpoint:
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+        
+# Configuración de messaging para tests (mock)
+messaging:
+  enabled: false
+  
+# Configuración de QR codes para tests
+qr:
+  code:
+    size: 200
+    format: PNG 
